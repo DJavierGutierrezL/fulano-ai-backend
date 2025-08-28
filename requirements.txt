@@ -2,4 +2,4 @@ fastapi
 uvicorn
 requests
 google-generativeai
-replicate
+pytz
