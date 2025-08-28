@@ -1,4 +1,5 @@
-# api/router_huggingface.py
+# api/router_huggingface.py - VERSIÓN DE PRUEBA SIMPLIFICADA
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import requests
@@ -6,7 +7,7 @@ import os
 
 router = APIRouter()
 
-# --- Modelos de Datos ---
+# --- Modelos de Datos (sin cambios) ---
 class Message(BaseModel):
     id: str; text: str; sender: str
 
@@ -25,21 +26,29 @@ def chat_with_huggingface(request: HFChatRequest):
     try:
         api_url = f"https://api-inference.huggingface.co/models/{request.model_id}"
         headers = {"Authorization": f"Bearer {hf_token}"}
-        
-        # Formateamos el historial para que los modelos Instruct lo entiendan mejor
-        prompt = ""
-        if request.history:
-            for msg in request.history:
-                role = "User" if msg.sender == 'user' else "Assistant"
-                prompt += f"{role}: {msg.text}\n"
-        prompt += f"User: {request.message}\nAssistant:"
 
-        payload = {"inputs": prompt, "parameters": {"return_full_text": False}}
-        response = requests.post(api_url, headers=headers, json=payload)
+        # =================================================================
+        # CAMBIO CLAVE: IGNORAMOS EL HISTORIAL Y ENVIAMOS SOLO EL MENSAJE NUEVO
+        # =================================================================
+        payload = {
+            "inputs": request.message,
+            "parameters": {
+                "return_full_text": False,
+                # Añadimos un parámetro para evitar que el modelo se repita
+                "repetition_penalty": 1.1 
+            }
+        }
+
+        response = requests.post(api_url, headers=headers, json=payload, timeout=120)
         
         if response.status_code != 200:
+             # Imprimimos el error en los logs para tener más detalles
+             print(f"Error de Hugging Face: {response.status_code} - {response.text}")
              raise HTTPException(status_code=response.status_code, detail=response.text)
 
         return response.json()
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="La solicitud al modelo de IA tardó demasiado en responder (timeout). Inténtalo de nuevo.")
     except Exception as e:
+        print(f"Error inesperado en el enrutador de Hugging Face: {e}")
         raise HTTPException(status_code=500, detail=str(e))
