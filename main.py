@@ -1,11 +1,12 @@
-# main.py - VERSIÓN CON CORRECCIÓN DE SINTAXIS
+# main.py - VERSIÓN CON CORRECCIÓN DE IMPORTACIÓN
 
 import os
 import requests
 from datetime import datetime
 import pytz 
 import google.generativeai as genai
-from google.generativeai.types import Part
+# CORRECCIÓN 1: Importamos el módulo 'protos' que contiene 'Part'
+import google.generativeai.protos as protos
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 import base64
 import json
 
-# --- Configuración de APIs ---
+# --- (El resto del código hasta el endpoint del chat no cambia) ---
 api_key = os.getenv("GEMINI_API_KEY")
 weather_api_key = os.getenv("WEATHER_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
@@ -21,7 +22,6 @@ serper_api_key = os.getenv("SERPER_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-# --- Definición de Herramientas ---
 def get_current_time(timezone: str = "America/Caracas"):
     try:
         tz = pytz.timezone(timezone)
@@ -69,7 +69,6 @@ def google_search(query: str):
             return {"result": data["organic"][0].get("snippet")}
         return {"result": "No se encontró una respuesta directa."}
     except requests.exceptions.RequestException:
-        # ESTA ES LA LÍNEA QUE CORREGIMOS
         return {"error": f"La búsqueda de '{query}' falló."}
 
 def translate_text(text: str, target_language: str, source_language: str = "auto"):
@@ -82,11 +81,9 @@ def translate_text(text: str, target_language: str, source_language: str = "auto
     except requests.exceptions.RequestException:
         return {"error": "El servicio de traducción falló."}
 
-# --- Configuración de FastAPI ---
 app = FastAPI(title="Asistente Virtual con Herramientas")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# --- Modelos de Datos ---
 class Message(BaseModel):
     id: str
     text: str
@@ -99,7 +96,6 @@ class ChatRequest(BaseModel):
 class ImageRequest(BaseModel):
     prompt: str
 
-# --- Endpoint del Chat ---
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
@@ -133,8 +129,9 @@ def chat(request: ChatRequest):
             elif tool_name == "google_search": tool_result = google_search(**tool_args)
             elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
             
+            # CORRECCIÓN 2: Usamos 'protos.Part' y 'protos.FunctionResponse'
             response = chat_session.send_message(
-                Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
+                protos.Part(function_response=protos.FunctionResponse(name=tool_name, response=tool_result))
             )
 
         final_text = "".join(part.text for part in response.parts)
@@ -144,7 +141,6 @@ def chat(request: ChatRequest):
         print(f"Error en el endpoint de chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Endpoint de Generación de Imágenes ---
 @app.post("/api/generate-image")
 def generate_image(request: ImageRequest):
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
