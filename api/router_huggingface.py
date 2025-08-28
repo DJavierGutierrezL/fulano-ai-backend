@@ -1,54 +1,49 @@
-# api/router_huggingface.py - VERSIÓN DE PRUEBA SIMPLIFICADA
+# api/router_huggingface.py - VERSIÓN FINAL CON REPLICATE
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import requests
+import replicate
 import os
 
 router = APIRouter()
 
-# --- Modelos de Datos (sin cambios) ---
+# --- Modelos de Datos ---
 class Message(BaseModel):
     id: str; text: str; sender: str
 
 class HFChatRequest(BaseModel):
     message: str
-    model_id: str
+    model_id: str # Aquí irá el ID del modelo en Replicate
     history: list[Message] | None = None
 
-# --- Endpoint de Hugging Face ---
+# --- Endpoint de Replicate ---
 @router.post("/chat/huggingface")
-def chat_with_huggingface(request: HFChatRequest):
-    hf_token = os.getenv("HF_TOKEN")
-    if not hf_token:
-        raise HTTPException(status_code=500, detail="Token de Hugging Face no configurado.")
+def chat_with_replicate(request: HFChatRequest):
+    # La librería de Replicate leerá el token automáticamente de las variables de entorno
+    if not os.getenv("REPLICATE_API_TOKEN"):
+        raise HTTPException(status_code=500, detail="Token de Replicate no configurado.")
     
     try:
-        api_url = f"https://api-inference.huggingface.co/models/{request.model_id}"
-        headers = {"Authorization": f"Bearer {hf_token}"}
+        # Formateamos el historial y el mensaje en un solo prompt
+        prompt = ""
+        if request.history:
+            for msg in request.history:
+                role = "User" if msg.sender == 'user' else "Assistant"
+                prompt += f"{role}: {msg.text}\n"
+        prompt += f"User: {request.message}\nAssistant:"
 
-        # =================================================================
-        # CAMBIO CLAVE: IGNORAMOS EL HISTORIAL Y ENVIAMOS SOLO EL MENSAJE NUEVO
-        # =================================================================
-        payload = {
-            "inputs": request.message,
-            "parameters": {
-                "return_full_text": False,
-                # Añadimos un parámetro para evitar que el modelo se repita
-                "repetition_penalty": 1.1 
-            }
-        }
-
-        response = requests.post(api_url, headers=headers, json=payload, timeout=120)
+        # Hacemos la llamada a Replicate
+        output = replicate.run(
+            request.model_id,
+            input={"prompt": prompt}
+        )
         
-        if response.status_code != 200:
-             # Imprimimos el error en los logs para tener más detalles
-             print(f"Error de Hugging Face: {response.status_code} - {response.text}")
-             raise HTTPException(status_code=response.status_code, detail=response.text)
-
-        return response.json()
-    except requests.exceptions.Timeout:
-        raise HTTPException(status_code=504, detail="La solicitud al modelo de IA tardó demasiado en responder (timeout). Inténtalo de nuevo.")
+        # La respuesta de Replicate es un generador, así que unimos las partes
+        full_response = "".join(output)
+        
+        # Devolvemos la respuesta en el formato que nuestro frontend espera
+        return [{"generated_text": full_response}]
+        
     except Exception as e:
-        print(f"Error inesperado en el enrutador de Hugging Face: {e}")
+        print(f"Error al llamar a la API de Replicate: {e}")
         raise HTTPException(status_code=500, detail=str(e))
