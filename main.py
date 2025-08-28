@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL Y ESTABLE
+# main.py - VERSIÓN CORREGIDA FINAL
 
 import os
 import requests
@@ -54,7 +54,7 @@ class ChatRequest(BaseModel):
 class ImageRequest(BaseModel):
     prompt: str
 
-# --- Endpoint del Chat (CORREGIDO Y ESTABLE) ---
+# --- Endpoint del Chat (CORREGIDO) ---
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     if not api_key:
@@ -68,7 +68,6 @@ def chat(request: ChatRequest):
         Evita ser robótico. Sé útil, pero con un toque personal y cercano.
         """
         
-        # SOLUCIÓN: Usamos un modelo más rápido y estable (Flash) y el parámetro oficial "system_instruction"
         model = genai.GenerativeModel(
             'gemini-1.5-flash-latest',
             system_instruction=system_instruction,
@@ -92,27 +91,27 @@ def chat(request: ChatRequest):
             if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
             elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
             
+            # CORRECCIÓN 1: Enviamos el resultado como un diccionario, no como un string
             response = chat_session.send_message(
-                genai.Part(function_response=genai.protos.FunctionResponse(name=tool_name, response={"result": str(tool_result)}))
+                genai.Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
             )
 
-        return JSONResponse(content=[{"generated_text": response.text}])
+        # CORRECCIÓN 2: Extraemos el texto de forma segura para evitar el error 'Could not convert...'
+        final_text = "".join(part.text for part in response.parts)
+        return JSONResponse(content=[{"generated_text": final_text}])
+        
     except Exception as e:
         print(f"Error en el endpoint de chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Endpoint de Generación de Imágenes (CORREGIDO) ---
+# --- Endpoint de Generación de Imágenes (Sin cambios, pero el problema puede ser de rate limit) ---
 @app.post("/api/generate-image")
 def generate_image(request: ImageRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
-        # SOLUCIÓN: Usamos el modelo Pro y simplemente le pedimos que genere una imagen en el prompt.
-        # Eliminamos la configuration "response_mime_type" que causaba el error 400.
         model = genai.GenerativeModel('gemini-1.5-pro-latest')
-        
-        prompt = f"Genera una imagen fotorrealista de alta calidad de: {request.prompt}"
-        
+        prompt = f"Una imagen fotorrealista de alta calidad de: {request.prompt}"
         response = model.generate_content(prompt)
         
         image_data = response.parts[0].inline_data
