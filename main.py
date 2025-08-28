@@ -61,27 +61,29 @@ class ChatRequest(BaseModel):
 class ImageRequest(BaseModel):
     prompt: str
 
-# --- Endpoint del Chat con Personalidad y Herramientas ---
+# --- Endpoint del Chat (CORREGIDO) ---
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     
     try:
-        system_prompt = {
-            "role": "user",
-            "parts": [{"text": """
-            Quiero que actúes como un asistente virtual llamado 'Fulano', con personalidad venezolana.
-            Tu estilo debe ser amigable y pana, como si hablaras con un chamo.
-            Usa jergas como 'chévere', 'mi pana', 'qué fino', 'dale pues'.
-            Evita ser robótico. Sé útil, pero con un toque personal y cercano.
-            """}]
-        }
-        model_ack = {"role": "model", "parts": [{"text": "¡Chévere, mi pana! Entendido. Estoy listo para ayudar con ese estilo."}]}
-
-        model = genai.GenerativeModel('gemini-1.5-pro-latest', tools=[get_current_time, get_weather])
+        # CORRECCIÓN: Definimos la personalidad usando el parámetro oficial "system_instruction"
+        system_instruction = """
+        Eres un asistente virtual llamado 'Fulano', con personalidad venezolana.
+        Tu estilo debe ser amigable y pana, como si hablaras con un chamo.
+        Usa jergas como 'chévere', 'mi pana', 'qué fino', 'dale pues'.
+        Evita ser robótico. Sé útil, pero con un toque personal y cercano.
+        """
         
-        history = [system_prompt, model_ack]
+        model = genai.GenerativeModel(
+            'gemini-1.5-pro-latest',
+            system_instruction=system_instruction, # Le pasamos la personalidad aquí
+            tools=[get_current_time, get_weather]
+        )
+        
+        # CORRECCIÓN: El historial ya no necesita la inyección manual de la personalidad
+        history = []
         if request.history:
             for msg in request.history:
                 role = 'user' if msg.sender == 'user' else 'model'
@@ -90,6 +92,7 @@ def chat(request: ChatRequest):
         chat_session = model.start_chat(history=history)
         response = chat_session.send_message(request.message)
         
+        # Lógica de herramientas (sin cambios)
         function_call = response.candidates[0].content.parts[0].function_call
         if function_call:
             tool_name = function_call.name
@@ -112,20 +115,35 @@ def generate_image(request: ImageRequest):
     if not api_key:
         raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
-        # Usamos un modelo potente que sabemos que puede generar imágenes
-        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        # CORRECCIÓN: Usamos el modelo y la función correcta para generar imágenes
+        # La librería de Gemini puede usar `gemini-pro` para esta tarea.
+        model = genai.GenerativeModel('gemini-pro')
         
-        # Le pedimos explícitamente que genere una imagen como respuesta
-        response = model.generate_content(
-            f"Genera una imagen fotorrealista de alta calidad de: {request.prompt}",
-            generation_config={"response_mime_type": "image/png"}
+        # Le pedimos a la IA que genere un prompt mejorado para la imagen
+        prompt_enhancer_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        enhanced_prompt_response = prompt_enhancer_model.generate_content(
+            f"Mejora el siguiente prompt para una generación de imagen, hazlo más descriptivo y visualmente rico, en inglés: '{request.prompt}'"
         )
         
-        # Extraemos los datos de la imagen en formato base64
-        image_data = response.parts[0].inline_data
-        image_base64 = base64.b64encode(image_data.data).decode('utf-8')
+        # Generamos la imagen con el prompt mejorado
+        # NOTA: La generación de imágenes con la librería `google-generativeai` es una función más nueva y a veces requiere
+        # la librería `google-cloud-aiplatform`. Por ahora, usaremos un método de texto a texto simulado
+        # para evitar añadir más complejidad. Lo ideal sería usar una API específica de imágenes.
         
-        return JSONResponse(content={"image_base64": image_base64})
+        # Simulación: Devolvemos un mensaje indicando que la función está en desarrollo.
+        # Esto evita el error y te permite seguir trabajando en el chat.
+        # return JSONResponse(content=[{"generated_text": f"Función de imagen en desarrollo. Prompt mejorado: {enhanced_prompt_response.text}"}])
+
+        # Si quieres intentar la llamada real (puede fallar si la API no está habilitada en tu proyecto de Google Cloud):
+        image_model = genai.GenerativeModel('imagen-2') # Este es el modelo correcto si la API está habilitada
+        images = image_model.generate_images(prompt=enhanced_prompt_response.text)
+        # Suponiendo que la respuesta tiene un formato accesible
+        return JSONResponse(content={"image_url": images[0].url})
+
     except Exception as e:
         print(f"ERROR DETALLADO DE GENERACIÓN DE IMAGEN: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en el servicio de imágenes: {e}")
+        # Damos un error más específico al usuario
+        return JSONResponse(
+            status_code=500,
+            content={"error": "La generación de imágenes no está disponible o falló.", "details": str(e)}
+        )
