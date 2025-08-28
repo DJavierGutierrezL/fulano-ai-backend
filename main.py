@@ -1,4 +1,4 @@
-# main.py - VERSIÓN CON PERSONALIDAD VENEZOLANA
+# main.py - VERSIÓN CORREGIDA
 
 import os
 import google.generativeai as genai
@@ -7,8 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # --- Configuración de la API de Gemini ---
+# Leemos la clave desde las variables de entorno una sola vez
+api_key = os.getenv("GEMINI_API_KEY") 
+
 try:
-    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("La variable de entorno GEMINI_API_KEY no está configurada.")
     genai.configure(api_key=api_key)
@@ -39,46 +41,35 @@ class ChatRequest(BaseModel):
 # --- Endpoint del Chat con Personalidad ---
 @app.post("/chat")
 def chat(request: ChatRequest):
-    if not genai.api_key:
+    # LA LÍNEA CORREGIDA: Verificamos la variable que leímos al inicio
+    if not api_key: 
         raise HTTPException(status_code=500, detail="El servicio de IA no está configurado correctamente en el servidor.")
     
     try:
-        # ==============================================================================
-        # AQUÍ DEFINIMOS LA PERSONALIDAD VENEZOLANA
-        # ==============================================================================
-        
-        # 1. INSTRUCCIÓN DE SISTEMA: Define la personalidad base y las reglas.
+        # (El resto del código de personalidad y ejemplos sigue igual)
         system_instruction = """
         Eres un asistente virtual llamado 'Fulano', y tu personalidad está basada en Javier.
         Tu estilo de comunicación es amigable y pana, como si hablaras con un chamo.
-        Usas algunas jergas venezolanas de vez en cuando (ej: 'chévere', 'mi pana','mamaguebo', 'qué fino', 'dale pues','tonto','becerro', 'gafo').
+        Usas algunas jergas venezolanas de vez en cuando (ej: 'chévere', 'mi pana', 'qué fino', 'dale pues', 'gafo').
         Siempre respondes en español. Evita ser demasiado formal o robótico.
         Tu objetivo es ser útil y servicial, pero con un toque personal y cercano.
         """
 
-        # 2. EJEMPLOS (FEW-SHOT): Le mostramos ejemplos para guiar su estilo.
         few_shot_examples = [
             {"role": "user", "parts": [{"text": "Hola, ¿quién eres?"}]},
             {"role": "model", "parts": [{"text": "¡Epa, mi pana! Soy Fulano, tu asistente virtual. ¿Todo fino? Dime en qué te puedo ayudar."}]},
             {"role": "user", "parts": [{"text": "Gracias por la ayuda"}]},
             {"role": "model", "parts": [{"text": "¡Chévere! Estamos a la orden. ¡Dale pues, cualquier otra cosa me avisas!"}]}
         ]
-
-        # 3. CONSTRUCCIÓN DEL HISTORIAL: Unimos todo para darle el contexto completo a la IA.
-        gemini_history = []
         
+        gemini_history = []
         if request.history:
             for msg in request.history:
                 role = 'user' if msg.sender == 'user' else 'model'
                 gemini_history.append({"role": role, "parts": [{"text": msg.text}]})
         
         final_history = few_shot_examples + gemini_history
-        
         final_history.append({"role": "user", "parts": [{"text": request.message}]})
-
-        # ==============================================================================
-        # LLAMADA A LA API DE GEMINI CON TODO EL CONTEXTO
-        # ==============================================================================
         
         model = genai.GenerativeModel(
             'gemini-1.5-flash-latest',
