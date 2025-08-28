@@ -1,11 +1,10 @@
-# main.py - VERSIÓN CON CORRECCIÓN FINAL DE HERRAMIENTAS
+# main.py - VERSIÓN CON SINTAXIS VERIFICADA
 
 import os
 import requests
 from datetime import datetime
 import pytz 
 import google.generativeai as genai
-# CORRECCIÓN 1: Importamos 'Part' desde la ubicación correcta
 from google.generativeai.types import Part
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -14,7 +13,7 @@ from pydantic import BaseModel
 import base64
 import json
 
-# --- (El resto de las configuraciones y funciones de herramientas no cambian) ---
+# --- Configuración de APIs ---
 api_key = os.getenv("GEMINI_API_KEY")
 weather_api_key = os.getenv("WEATHER_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
@@ -22,6 +21,7 @@ serper_api_key = os.getenv("SERPER_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
+# --- Definición de Herramientas ---
 def get_current_time(timezone: str = "America/Caracas"):
     try:
         tz = pytz.timezone(timezone)
@@ -69,64 +69,4 @@ def google_search(query: str):
             return {"result": data["organic"][0].get("snippet")}
         return {"result": "No se encontró una respuesta directa."}
     except requests.exceptions.RequestException:
-        return {"error": f"La búsqueda de '{query}' falló."}
-
-def translate_text(text: str, target_language: str, source_language: str = "auto"):
-    try:
-        url = f"https://api.mymemory.translated.net/get?q={text}&langpair={source_language}|{target_language}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        return {"translated_text": data["responseData"]["translatedText"]}
-    except requests.exceptions.RequestException:
-        return {"error": "El servicio de traducción falló."}
-
-app = FastAPI(title="Asistente Virtual con Herramientas")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-class Message(BaseModel):
-    id: str; text: str; sender: str
-
-class ChatRequest(BaseModel):
-    message: str; history: list[Message] | None = None
-# --- (El resto de la app sigue igual hasta el endpoint de chat) ---
-
-@app.post("/api/chat")
-def chat(request: ChatRequest):
-    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
-    
-    try:
-        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
-        
-        model = genai.GenerativeModel(
-            'gemini-1.5-flash-latest',
-            system_instruction=system_instruction,
-            tools=[get_current_time, get_weather, get_news, google_search, translate_text]
-        )
-        
-        history = []
-        if request.history:
-            for msg in request.history:
-                role = 'user' if msg.sender == 'user' else 'model'
-                history.append({"role": role, "parts": [{"text": msg.text}]})
-        
-        chat_session = model.start_chat(history=history)
-        response = chat_session.send_message(request.message)
-        
-        function_call = response.candidates[0].content.parts[0].function_call
-        if function_call:
-            tool_name = function_call.name
-            tool_args = {key: value for key, value in function_call.args.items()}
-            tool_result = None
-            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
-            elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
-            elif tool_name == "get_news": tool_result = get_news(**tool_args)
-            elif tool_name == "google_search": tool_result = google_search(**tool_args)
-            elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
-            
-            # CORRECCIÓN 2: Usamos 'Part' directamente, sin 'genai.'
-            response = chat_session.send_message(
-                Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
-            )
-
-        final_text = "".
+        return {"error": f"La búsqueda de '{query}' fall
