@@ -1,4 +1,4 @@
-# main.py - VERSIÓN CON SINTAXIS VERIFICADA
+# main.py - VERSIÓN CON CORRECCIÓN DE SINTAXIS
 
 import os
 import requests
@@ -69,4 +69,94 @@ def google_search(query: str):
             return {"result": data["organic"][0].get("snippet")}
         return {"result": "No se encontró una respuesta directa."}
     except requests.exceptions.RequestException:
-        return {"error": f"La búsqueda de '{query}' fall
+        # ESTA ES LA LÍNEA QUE CORREGIMOS
+        return {"error": f"La búsqueda de '{query}' falló."}
+
+def translate_text(text: str, target_language: str, source_language: str = "auto"):
+    try:
+        url = f"https://api.mymemory.translated.net/get?q={text}&langpair={source_language}|{target_language}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return {"translated_text": data["responseData"]["translatedText"]}
+    except requests.exceptions.RequestException:
+        return {"error": "El servicio de traducción falló."}
+
+# --- Configuración de FastAPI ---
+app = FastAPI(title="Asistente Virtual con Herramientas")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# --- Modelos de Datos ---
+class Message(BaseModel):
+    id: str
+    text: str
+    sender: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[Message] | None = None
+
+class ImageRequest(BaseModel):
+    prompt: str
+
+# --- Endpoint del Chat ---
+@app.post("/api/chat")
+def chat(request: ChatRequest):
+    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+    
+    try:
+        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
+        
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash-latest',
+            system_instruction=system_instruction,
+            tools=[get_current_time, get_weather, get_news, google_search, translate_text]
+        )
+        
+        history = []
+        if request.history:
+            for msg in request.history:
+                role = 'user' if msg.sender == 'user' else 'model'
+                history.append({"role": role, "parts": [{"text": msg.text}]})
+        
+        chat_session = model.start_chat(history=history)
+        response = chat_session.send_message(request.message)
+        
+        function_call = response.candidates[0].content.parts[0].function_call
+        if function_call:
+            tool_name = function_call.name
+            tool_args = {key: value for key, value in function_call.args.items()}
+            tool_result = None
+            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
+            elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
+            elif tool_name == "get_news": tool_result = get_news(**tool_args)
+            elif tool_name == "google_search": tool_result = google_search(**tool_args)
+            elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
+            
+            response = chat_session.send_message(
+                Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
+            )
+
+        final_text = "".join(part.text for part in response.parts)
+        return JSONResponse(content=[{"generated_text": final_text}])
+        
+    except Exception as e:
+        print(f"Error en el endpoint de chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Endpoint de Generación de Imágenes ---
+@app.post("/api/generate-image")
+def generate_image(request: ImageRequest):
+    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+    try:
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        prompt = f"Una imagen fotorrealista de alta calidad de: {request.prompt}"
+        response = model.generate_content(prompt)
+        
+        image_data = response.parts[0].inline_data
+        image_base64 = base64.b64encode(image_data.data).decode('utf-8')
+        
+        return JSONResponse(content={"image_base64": image_base64})
+    except Exception as e:
+        print(f"ERROR DETALLADO DE GENERACIÓN DE IMAGEN: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en el servicio de imágenes: {e}")
