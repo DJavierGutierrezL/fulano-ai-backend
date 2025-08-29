@@ -1,11 +1,11 @@
-# main.py - VERSIÓN CON CORRECCIÓN DE SINTAXIS FINAL
+# main.py - VERSIÓN CON CORRECCIÓN FINAL DE IMPORTACIÓN
 
 import os
 import requests
 from datetime import datetime
 import pytz 
 import google.generativeai as genai
-from google.generativeai.types import Part
+import google.generativeai.protos as protos
 import cohere
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -97,16 +97,10 @@ def calculate(expression: str):
         return {"error": f"Expresión matemática inválida: {e}"}
 
 def rerank_documents(query: str, documents: list[str]):
-    if not cohere_api_key: 
-        return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
+    if not cohere_api_key: return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
     try:
         co = cohere.Client(cohere_api_key)
-        response = co.rerank(
-            model='rerank-multilingual-v3.0',
-            query=query,
-            documents=documents,
-            top_n=3
-        )
+        response = co.rerank(model='rerank-multilingual-v3.0', query=query, documents=documents, top_n=3)
         ranked_results = [{"document": result.document['text']} for result in response.results]
         return {"ranked_results": ranked_results}
     except Exception as e:
@@ -162,7 +156,6 @@ def chat(request: ChatRequest):
         response = chat_session.send_message(request.message)
         
         function_call = response.candidates[0].content.parts[0].function_call
-        # ESTA ES LA LÍNEA QUE CORREGIMOS (añadimos los dos puntos ':')
         if function_call:
             tool_name = function_call.name
             tool_args = {key: value for key, value in function_call.args.items()}
@@ -178,8 +171,9 @@ def chat(request: ChatRequest):
             elif tool_name == "get_pokemon_info": tool_result = get_pokemon_info(**tool_args)
             elif tool_name == "search_marvel_character": tool_result = search_marvel_character(**tool_args)
             
+            # CORRECCIÓN: Enviamos el FunctionResponse directamente, sin el 'Part' manual
             response = chat_session.send_message(
-                Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
+                protos.FunctionResponse(name=tool_name, response=tool_result)
             )
 
         final_text = "".join(part.text for part in response.parts)
@@ -189,4 +183,18 @@ def chat(request: ChatRequest):
         print(f"Error en el endpoint de chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ... (El endpoint de /api/generate-image no cambia)
+@app.post("/api/generate-image")
+def generate_image(request: ImageRequest):
+    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+    try:
+        model = genai.GenerativeModel('gemini-1.5-pro-latest')
+        prompt = f"Una imagen fotorrealista de alta calidad de: {request.prompt}"
+        response = model.generate_content(prompt)
+        
+        image_data = response.parts[0].inline_data
+        image_base64 = base64.b64encode(image_data.data).decode('utf-8')
+        
+        return JSONResponse(content={"image_base64": image_base64})
+    except Exception as e:
+        print(f"ERROR DETALLADO DE GENERACIÓN DE IMAGEN: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en el servicio de imágenes: {e}")
