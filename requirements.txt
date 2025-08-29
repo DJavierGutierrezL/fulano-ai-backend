@@ -3,3 +3,5 @@ uvicorn
 requests
 google-generativeai
 pytz
+asteval
+cohere
