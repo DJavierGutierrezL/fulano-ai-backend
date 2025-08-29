@@ -32,6 +32,7 @@ if api_key:
     genai.configure(api_key=api_key)
 
 # --- Definición de Herramientas ---
+# (Todas las funciones de herramientas desde get_current_time hasta search_free_images permanecen sin cambios)
 def get_current_time(timezone: str = "America/Caracas"):
     """Devuelve la hora actual en una zona horaria específica."""
     try:
@@ -164,6 +165,7 @@ def search_free_images(search_query: str):
         print(f"ERROR en la herramienta search_free_images (Pexels): {e}")
         return {"error": f"La búsqueda de imágenes en Pexels falló: {e}"}
 
+
 # --- Configuración y Endpoints de FastAPI ---
 app = FastAPI(title="Asistente Virtual con Herramientas")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -184,34 +186,56 @@ class ImageRequest(BaseModel):
 def chat(request: ChatRequest):
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
-        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
+        # <<< CAMBIO APLICADO AQUÍ >>>
+        # Se reemplaza la línea única por la instrucción completa y detallada.
+        system_instruction = """
+        Eres un asistente virtual llamado 'Fulano', con personalidad venezolana.
+        Tu estilo debe ser amigable y pana, como si hablaras con un chamo.
+        Usa jergas como 'chévere', 'mi pana', 'qué fino', 'dale pues'.
+        Evita ser robótico. Sé útil, pero con un toque personal y cercano.
+        Cuando una herramienta te devuelva información, como una lista de URLs de imágenes o noticias,
+        tu trabajo es presentar esa información al usuario de forma clara y directa.
+        No intentes 'mostrar' la imagen tú mismo, simplemente proporciona los enlaces o los datos que recibiste.
+        """
+        
         model = genai.GenerativeModel(
             'gemini-1.5-flash-latest',
             system_instruction=system_instruction,
             tools=[get_current_time, get_weather, get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, search_free_images]
         )
+        
         history = [{"role": "user" if msg.sender == 'user' else "model", "parts": [{"text": msg.text}]} for msg in request.history] if request.history else []
         chat_session = model.start_chat(history=history)
         response = chat_session.send_message(request.message)
+        
+        # Este bloque de código ahora es más robusto porque se ejecuta después de que el modelo
+        # ha recibido la instrucción detallada sobre cómo manejar los resultados de las herramientas.
         function_call = response.candidates[0].content.parts[0].function_call
         if function_call:
             tool_name = function_call.name
             tool_args = {key: value for key, value in function_call.args.items()}
             tool_result = None
-            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
-            elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
-            elif tool_name == "get_news": tool_result = get_news(**tool_args)
-            elif tool_name == "google_search": tool_result = google_search(**tool_args)
-            elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
-            elif tool_name == "calculate": tool_result = calculate(**tool_args)
-            elif tool_name == "rerank_documents": tool_result = rerank_documents(**tool_args)
-            elif tool_name == "get_pokemon_info": tool_result = get_pokemon_info(**tool_args)
-            elif tool_name == "search_marvel_character": tool_result = search_marvel_character(**tool_args)
-            elif tool_name == "search_free_images": tool_result = search_free_images(**tool_args)
             
+            # Mapeo de nombres de herramientas a funciones (más limpio y escalable)
+            tools_map = {
+                "get_current_time": get_current_time,
+                "get_weather": get_weather,
+                "get_news": get_news,
+                "google_search": google_search,
+                "translate_text": translate_text,
+                "calculate": calculate,
+                "rerank_documents": rerank_documents,
+                "get_pokemon_info": get_pokemon_info,
+                "search_marvel_character": search_marvel_character,
+                "search_free_images": search_free_images
+            }
+            if tool_name in tools_map:
+                tool_result = tools_map[tool_name](**tool_args)
+
             response = chat_session.send_message(
                 protos.FunctionResponse(name=tool_name, response=tool_result)
             )
+
         final_text = "".join(part.text for part in response.parts)
         return JSONResponse(content=[{"generated_text": final_text}])
     except Exception as e:
