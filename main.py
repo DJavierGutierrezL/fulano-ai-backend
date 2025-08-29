@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL CON TODAS LAS FUNCIONES INTEGRADAS
+# main.py - VERSIÓN CON HERRAMIENTA DE CLIMA HISTÓRICO (METEOSTAT)
 
 import os
 import requests
@@ -18,7 +18,7 @@ import time
 import hashlib
 import pokebase as pb
 
-# --- Configuración de APIs ---
+# --- (El inicio del archivo y las variables de API no cambian) ---
 api_key = os.getenv("GEMINI_API_KEY")
 weather_api_key = os.getenv("WEATHER_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
@@ -31,79 +31,98 @@ rapidapi_key = os.getenv("RAPIDAPI_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-# --- Definición de Herramientas ---
+# --- (Las herramientas existentes no cambian, se omiten por brevedad) ---
 def get_current_time(timezone: str = "America/Caracas"):
-    # ... (código de la función)
+    # ...
 def get_weather(city: str):
-    # ... (código de la función)
-def get_news(query: str):
-    # ... (código de la función)
-def google_search(query: str):
-    # ... (código de la función)
-def translate_text(text: str, target_language: str, source_language: str = "auto"):
-    # ... (código de la función)
-def calculate(expression: str):
-    # ... (código de la función)
-def rerank_documents(query: str, documents: list[str]):
-    # ... (código de la función)
-def get_pokemon_info(pokemon_name: str):
-    # ... (código de la función)
-def search_marvel_character(character_name: str):
-    # ... (código de la función)
+    # ...
+# ... y las demás ...
 
-# --- Configuración de FastAPI ---
-app = FastAPI(title="Asistente Virtual con Herramientas")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# --- Modelos de Datos ---
-class Message(BaseModel): id: str; text: str; sender: str
-class ChatRequest(BaseModel): message: str; history: list[Message] | None = None
-class ImageRequest(BaseModel): prompt: str
-class FaceSwapRequest(BaseModel):
-    source_image_url: str
-    target_image_url: str
-
-# --- Endpoints ---
-@app.post("/api/chat")
-def chat(request: ChatRequest):
-    # ... (código del endpoint de chat sin cambios)
-
-@app.post("/api/generate-image")
-def generate_image(request: ImageRequest):
-    # ... (código del endpoint de generación de imágenes sin cambios)
-
-# --- NUEVO ENDPOINT: FACE SWAP ---
-@app.post("/api/face-swap")
-def face_swap(request: FaceSwapRequest):
+# --- NUEVA HERRAMIENTA: Clima Histórico con Meteostat ---
+def get_historical_weather(latitude: float, longitude: float, start_date: str, end_date: str):
+    """
+    Obtiene datos climáticos históricos (mensuales) para un punto geográfico (latitud y longitud)
+    dentro de un rango de fechas. Las fechas deben estar en formato YYYY-MM-DD.
+    """
     if not rapidapi_key:
-        raise HTTPException(status_code=500, detail="El servicio de RapidAPI no está configurado.")
+        return {"error": "El servicio de Meteostat no está configurado."}
+    
+    # Usaremos el endpoint de datos mensuales que se muestra en tu captura
+    url = "https://meteostat.p.rapidapi.com/point/monthly"
+    
+    querystring = {
+        "lat": str(latitude),
+        "lon": str(longitude),
+        "start": start_date,
+        "end": end_date
+    }
+    
+    headers = {
+        "X-RapidAPI-Key": rapidapi_key,
+        "X-RapidAPI-Host": "meteostat.p.rapidapi.com"
+    }
     
     try:
-        source_response = requests.get(request.source_image_url, timeout=20)
-        source_response.raise_for_status()
-        source_base64 = f"data:image/jpeg;base64,{base64.b64encode(source_response.content).decode('utf-8')}"
-
-        target_response = requests.get(request.target_image_url, timeout=20)
-        target_response.raise_for_status()
-        target_base64 = f"data:image/jpeg;base64,{base64.b64encode(target_response.content).decode('utf-8')}"
-
-        url = "https://deepfake-face-swap.p.rapidapi.com/swap"
-        payload = {"source": source_base64, "target": target_base64}
-        headers = {
-            "content-type": "application/json",
-            "X-RapidAPI-Key": rapidapi_key,
-            "X-RapidAPI-Host": "deepfake-face-swap.p.rapidapi.com"
-        }
-
-        api_response = requests.post(url, json=payload, headers=headers, timeout=120)
-        api_response.raise_for_status()
+        response = requests.get(url, headers=headers, params=querystring, timeout=30)
+        response.raise_for_status()
+        data = response.json().get("data", [])
+        if not data:
+            return {"result": "No se encontraron datos para ese período o ubicación."}
         
-        data = api_response.json()
-        result_base64 = data.get("image")
-        if not result_base64:
-             raise HTTPException(status_code=500, detail="La API de face swap no devolvió una imagen.")
-
-        return JSONResponse(content={"image_base64": result_base64.split(',')[1]})
+        # Procesamos los datos para dar un resumen
+        summary = []
+        for month_data in data:
+            summary.append(f"Mes: {month_data['month']}, Temp. Media: {month_data['tavg']}°C, Precipitación: {month_data['prcp']}mm")
+        
+        return {"summary": ", ".join(summary)}
+        
     except Exception as e:
-        print(f"ERROR DETALLADO DE FACE SWAP: {e}")
-        raise HTTPException(status_code=500, detail=f"Error en el servicio de face swap: {e}")
+        return {"error": f"La consulta a Meteostat falló: {e}"}
+
+
+# --- (El resto de la app FastAPI no cambia, solo actualizamos la lista de herramientas) ---
+app = FastAPI(title="Asistente Virtual con Herramientas")
+# ... (Middleware y Modelos de Datos)
+
+@app.post("/api/chat")
+def chat(request: ChatRequest):
+    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+    
+    try:
+        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
+        
+        # AÑADIMOS LA NUEVA HERRAMIENTA A LA LISTA DE GEMINI
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash-latest',
+            system_instruction=system_instruction,
+            tools=[get_current_time, get_weather, get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, get_historical_weather]
+        )
+        
+        history = [{"role": "user" if msg.sender == 'user' else "model", "parts": [{"text": msg.text}]} for msg in request.history] if request.history else []
+        chat_session = model.start_chat(history=history)
+        response = chat_session.send_message(request.message)
+        
+        function_call = response.candidates[0].content.parts[0].function_call
+        if function_call:
+            tool_name = function_call.name
+            tool_args = {key: value for key, value in function_call.args.items()}
+            tool_result = None
+            
+            # AÑADIMOS LA LÓGICA PARA EJECUTAR LA NUEVA HERRAMIENTA
+            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
+            # ... (elif para las otras herramientas)
+            elif tool_name == "search_marvel_character": tool_result = search_marvel_character(**tool_args)
+            elif tool_name == "get_historical_weather": tool_result = get_historical_weather(**tool_args)
+            
+            response = chat_session.send_message(
+                protos.FunctionResponse(name=tool_name, response=tool_result)
+            )
+
+        final_text = "".join(part.text for part in response.parts)
+        return JSONResponse(content=[{"generated_text": final_text}])
+        
+    except Exception as e:
+        print(f"Error en el endpoint de chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ... (El endpoint de /api/generate-image no cambia)
