@@ -107,6 +107,7 @@ def rerank_documents(query: str, documents: list[str]):
         return {"error": f"El re-ranking de documentos con Cohere falló: {e}"}
 
 def get_pokemon_info(pokemon_name: str):
+    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos. Es la herramienta principal para cualquier pregunta sobre información específica de un Pokémon."""
     try:
         pokemon = pb.pokemon(pokemon_name.lower())
         types = [t.type.name for t in pokemon.types]
