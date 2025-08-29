@@ -6,3 +6,4 @@ pytz
 asteval
 cohere
 pokebase
+wikipedia-api

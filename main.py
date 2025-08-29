@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL COMPLETA CON PEXELS Y TODAS LAS HERRAMIENTAS
+# main.py - VERSIÓN FINAL COMPLETA CON WIKIPEDIA, CHISTES Y DIVISAS
 
 import os
 import requests
@@ -17,6 +17,7 @@ from asteval import Interpreter
 import time
 import hashlib
 import pokebase as pb
+import wikipediaapi # <-- NUEVA IMPORTACIÓN
 
 # --- Configuración de APIs ---
 api_key = os.getenv("GEMINI_API_KEY")
@@ -31,8 +32,7 @@ pexels_api_key = os.getenv("PEXELS_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
-# --- Definición de Herramientas ---
-# (Todas las funciones de herramientas desde get_current_time hasta search_free_images permanecen sin cambios)
+# --- Definición de Herramientas Existentes ---
 def get_current_time(timezone: str = "America/Caracas"):
     """Devuelve la hora actual en una zona horaria específica."""
     try:
@@ -116,7 +116,7 @@ def rerank_documents(query: str, documents: list[str]):
         return {"error": f"El re-ranking de documentos con Cohere falló: {e}"}
 
 def get_pokemon_info(pokemon_name: str):
-    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos. Es la herramienta principal para cualquier pregunta sobre información específica de un Pokémon."""
+    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos."""
     for attempt in range(3):
         try:
             pokemon = pb.pokemon(pokemon_name.lower())
@@ -148,8 +148,7 @@ def search_marvel_character(character_name: str):
 
 def search_free_images(search_query: str):
     """Busca imágenes gratuitas y de alta calidad sobre un tema específico usando la API de Pexels."""
-    if not pexels_api_key:
-        return {"error": "El servicio de búsqueda de imágenes Pexels no está configurado."}
+    if not pexels_api_key: return {"error": "El servicio de Pexels no está configurado."}
     try:
         url = "https://api.pexels.com/v1/search"
         headers = {"Authorization": pexels_api_key}
@@ -157,13 +156,53 @@ def search_free_images(search_query: str):
         response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         data = response.json().get("photos", [])
-        if not data:
-            return {"result": f"No se encontraron imágenes en Pexels para '{search_query}'."}
+        if not data: return {"result": f"No se encontraron imágenes en Pexels para '{search_query}'."}
         image_urls = [photo.get("src", {}).get("medium") for photo in data]
         return {"image_urls": image_urls}
     except Exception as e:
         print(f"ERROR en la herramienta search_free_images (Pexels): {e}")
         return {"error": f"La búsqueda de imágenes en Pexels falló: {e}"}
+
+# --- NUEVAS HERRAMIENTAS AÑADIDAS ---
+def search_wikipedia(topic: str):
+    """Busca un tema en Wikipedia y devuelve un resumen del artículo."""
+    try:
+        wiki_wiki = wikipediaapi.Wikipedia(language='es', user_agent='FulanoAI/1.0')
+        page = wiki_wiki.page(topic)
+        if not page.exists():
+            return {"error": f"No encontré un artículo de Wikipedia para '{topic}'."}
+        summary = page.summary[0:500] # Obtenemos los primeros 500 caracteres
+        return {"topic": topic, "summary": f"{summary}..."}
+    except Exception as e:
+        return {"error": f"La búsqueda en Wikipedia falló: {e}"}
+
+def tell_joke():
+    """Cuenta un chiste al azar en español."""
+    try:
+        response = requests.get("https://v2.jokeapi.dev/joke/Any?lang=es&type=single", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("error"):
+            return {"error": "No se pudo obtener un chiste en este momento."}
+        return {"joke": data.get("joke")}
+    except Exception as e:
+        return {"error": f"La API de chistes falló: {e}"}
+
+def get_exchange_rate(base_currency: str = "USD", target_currency: str = "COP"):
+    """Obtiene la tasa de cambio actual entre dos monedas."""
+    try:
+        url = f"https://open.er-api.com/v6/latest/{base_currency.upper()}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("result") == "error":
+            return {"error": data.get("error-type", "Error desconocido en la API de divisas")}
+        rate = data.get("rates", {}).get(target_currency.upper())
+        if not rate:
+            return {"error": f"No se encontró la tasa de cambio para '{target_currency.upper()}'."}
+        return {"base": base_currency.upper(), "target": target_currency.upper(), "rate": rate}
+    except Exception as e:
+        return {"error": f"La consulta de divisas falló: {e}"}
 
 
 # --- Configuración y Endpoints de FastAPI ---
@@ -186,8 +225,6 @@ class ImageRequest(BaseModel):
 def chat(request: ChatRequest):
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
-        # <<< CAMBIO APLICADO AQUÍ >>>
-        # Se reemplaza la línea única por la instrucción completa y detallada.
         system_instruction = """
         Eres un asistente virtual llamado 'Fulano', con personalidad venezolana.
         Tu estilo debe ser amigable y pana, como si hablaras con un chamo.
@@ -198,25 +235,30 @@ def chat(request: ChatRequest):
         No intentes 'mostrar' la imagen tú mismo, simplemente proporciona los enlaces o los datos que recibiste.
         """
         
+        # <<< CAMBIO APLICADO AQUÍ >>>
+        # Se añaden las nuevas herramientas a la lista que conoce el modelo.
         model = genai.GenerativeModel(
             'gemini-1.5-flash-latest',
             system_instruction=system_instruction,
-            tools=[get_current_time, get_weather, get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, search_free_images]
+            tools=[
+                get_current_time, get_weather, get_news, google_search, translate_text, 
+                calculate, rerank_documents, get_pokemon_info, search_marvel_character, 
+                search_free_images, search_wikipedia, tell_joke, get_exchange_rate
+            ]
         )
         
         history = [{"role": "user" if msg.sender == 'user' else "model", "parts": [{"text": msg.text}]} for msg in request.history] if request.history else []
         chat_session = model.start_chat(history=history)
         response = chat_session.send_message(request.message)
         
-        # Este bloque de código ahora es más robusto porque se ejecuta después de que el modelo
-        # ha recibido la instrucción detallada sobre cómo manejar los resultados de las herramientas.
         function_call = response.candidates[0].content.parts[0].function_call
         if function_call:
             tool_name = function_call.name
             tool_args = {key: value for key, value in function_call.args.items()}
             tool_result = None
             
-            # Mapeo de nombres de herramientas a funciones (más limpio y escalable)
+            # <<< CAMBIO APLICADO AQUÍ >>>
+            # Se actualiza el mapeo para incluir y poder ejecutar las nuevas funciones.
             tools_map = {
                 "get_current_time": get_current_time,
                 "get_weather": get_weather,
@@ -227,7 +269,10 @@ def chat(request: ChatRequest):
                 "rerank_documents": rerank_documents,
                 "get_pokemon_info": get_pokemon_info,
                 "search_marvel_character": search_marvel_character,
-                "search_free_images": search_free_images
+                "search_free_images": search_free_images,
+                "search_wikipedia": search_wikipedia,
+                "tell_joke": tell_joke,
+                "get_exchange_rate": get_exchange_rate
             }
             if tool_name in tools_map:
                 tool_result = tools_map[tool_name](**tool_args)
