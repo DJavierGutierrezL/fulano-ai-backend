@@ -7,3 +7,4 @@ asteval
 cohere
 pokebase
 wikipedia-api
+scikit-learn
