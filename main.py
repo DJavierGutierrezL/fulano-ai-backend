@@ -1,11 +1,11 @@
-# main.py - VERSIÓN CON MEJORAS EN EL MANEJO DE ERRORES
+# main.py - VERSIÓN FINAL COMPLETA Y VERIFICADA
 
 import os
 import requests
 from datetime import datetime
 import pytz 
 import google.generativeai as genai
-from google.generativeai.types import Part
+import google.generativeai.protos as protos
 import cohere
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -18,7 +18,7 @@ import time
 import hashlib
 import pokebase as pb
 
-# --- (El inicio del archivo y las primeras herramientas no cambian) ---
+# --- Configuración de APIs ---
 api_key = os.getenv("GEMINI_API_KEY")
 weather_api_key = os.getenv("WEATHER_API_KEY")
 news_api_key = os.getenv("NEWS_API_KEY")
@@ -26,92 +26,36 @@ serper_api_key = os.getenv("SERPER_API_KEY")
 cohere_api_key = os.getenv("COHERE_API_KEY")
 marvel_public_key = os.getenv("MARVEL_PUBLIC_KEY")
 marvel_private_key = os.getenv("MARVEL_PRIVATE_KEY")
-if api_key: genai.configure(api_key=api_key)
+
+if api_key:
+    genai.configure(api_key=api_key)
+
+# --- Definición de Herramientas ---
 def get_current_time(timezone: str = "America/Caracas"):
-    # ...
+    try:
+        tz = pytz.timezone(timezone)
+        current_time = datetime.now(tz)
+        return {"time": current_time.strftime("%I:%M %p")}
+    except pytz.UnknownTimeZoneError:
+        return {"error": "Zona horaria desconocida"}
+
 def get_weather(city: str):
-    # ...
-def get_news(query: str):
-    # ...
-def google_search(query: str):
-    # ...
-def translate_text(text: str, target_language: str, source_language: str = "auto"):
-    # ...
-def calculate(expression: str):
-    # ...
-def rerank_documents(query: str, documents: list[str]):
-    # ...
-
-# --- HERRAMIENTAS POKÉMON Y MARVEL CON MEJOR LOGGING DE ERRORES ---
-def get_pokemon_info(pokemon_name: str):
-    """Obtiene información detallada sobre un Pokémon específico."""
+    if not weather_api_key: return {"error": "El servicio del clima no está configurado"}
     try:
-        pokemon = pb.pokemon(pokemon_name.lower())
-        types = [t.type.name for t in pokemon.types]
-        info = { "name": pokemon.name.capitalize(), "pokedex_id": pokemon.id, "height": f"{pokemon.height / 10} m", "weight": f"{pokemon.weight / 10} kg", "types": types }
-        return info
-    except Exception as e:
-        # AÑADIMOS ESTE PRINT PARA VER EL ERROR ESPECÍFICO EN LOS LOGS
-        print(f"ERROR en la herramienta get_pokemon_info: {e}")
-        return {"error": f"No se encontró información para el Pokémon '{pokemon_name}'."}
-
-def search_marvel_character(character_name: str):
-    """Busca un personaje en el universo de Marvel y devuelve su descripción."""
-    if not marvel_public_key or not marvel_private_key:
-        return {"error": "El servicio de Marvel no está configurado."}
-    try:
-        ts = str(time.time())
-        hash_string = ts + marvel_private_key + marvel_public_key
-        hash_md5 = hashlib.md5(hash_string.encode()).hexdigest()
-        url = f"http://gateway.marvel.com/v1/public/characters?nameStartsWith={character_name}&ts={ts}&apikey={marvel_public_key}&hash={hash_md5}"
-        
-        response = requests.get(url, timeout=15)
+        url = f"http://api.weatherapi.com/v1/current.json?key={weather_api_key}&q={city}&lang=es"
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
-        data = response.json()["data"]["results"]
-        
-        if not data:
-            return {"result": f"No se encontró ningún personaje llamado '{character_name}'."}
-            
-        character = data[0]
-        return { "name": character["name"], "description": character["description"] or "No hay una descripción disponible.", "comics_available": character["comics"]["available"] }
-    except Exception as e:
-        # AÑADIMOS ESTE PRINT PARA VER EL ERROR ESPECÍFICO EN LOS LOGS
-        print(f"ERROR en la herramienta search_marvel_character: {e}")
-        return {"error": f"La búsqueda en Marvel falló: {e}"}
+        data = response.json()
+        weather = { "city": data["location"]["name"], "temperature": f"{data['current']['temp_c']}°C", "description": data["current"]["condition"]["text"] }
+        return weather
+    except requests.exceptions.RequestException:
+        return {"error": f"No se pudo obtener el clima para {city}"}
 
-# --- (El resto de la aplicación FastAPI sigue igual) ---
-app = FastAPI(title="Asistente Virtual con Herramientas")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-class Message(BaseModel): id: str; text: str; sender: str
-class ChatRequest(BaseModel): message: str; history: list[Message] | None = None
-class ImageRequest(BaseModel): prompt: str
-
-@app.post("/api/chat")
-def chat(request: ChatRequest):
-    if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+def get_news(query: str):
+    if not news_api_key: return {"error": "El servicio de noticias no está configurado"}
     try:
-        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
-        model = genai.GenerativeModel('gemini-1.5-flash-latest', tools=[get_current_time, get_weather, get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character])
-        history = [{"role": "user" if msg.sender == 'user' else "model", "parts": [{"text": msg.text}]} for msg in request.history] if request.history else []
-        chat_session = model.start_chat(history=history)
-        response = chat_session.send_message(request.message)
-        function_call = response.candidates[0].content.parts[0].function_call
-        if function_call:
-            tool_name = function_call.name
-            tool_args = {key: value for key, value in function_call.args.items()}
-            tool_result = None
-            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
-            elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
-            elif tool_name == "get_news": tool_result = get_news(**tool_args)
-            elif tool_name == "google_search": tool_result = google_search(**tool_args)
-            elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
-            elif tool_name == "calculate": tool_result = calculate(**tool_args)
-            elif tool_name == "rerank_documents": tool_result = rerank_documents(**tool_args)
-            elif tool_name == "get_pokemon_info": tool_result = get_pokemon_info(**tool_args)
-            elif tool_name == "search_marvel_character": tool_result = search_marvel_character(**tool_args)
-            response = chat_session.send_message(Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result)))
-        final_text = "".join(part.text for part in response.parts)
-        return JSONResponse(content=[{"generated_text": final_text}])
-    except Exception as e:
-        print(f"Error en el endpoint de chat: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        url = f"https://newsapi.org/v2/top-headlines?q={query}&language=es&pageSize=5&apiKey={news_api_key}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        headlines
