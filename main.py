@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL CON ENFOQUE HÍBRIDO
+# main.py - VERSIÓN FINAL CON ARQUITECTURA HÍBRIDA OPTIMIZADA
 
 import os
 import requests
@@ -19,13 +19,12 @@ import hashlib
 import pokebase as pb
 import wikipediaapi
 import random
-# <-- NUEVAS IMPORTACIONES PARA EL CLASIFICADOR -->
+
+# --- IMPORTACIONES PARA EL CEREBRO LOCAL ---
 from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-
-# <-- IMPORTAMOS NUESTROS INTENTS LOCALES -->
-from intents import INTENTS
+from intents import INTENTS # Importamos las intenciones desde nuestro archivo
 
 # --- Configuración de APIs (sin cambios) ---
 api_key = os.getenv("GEMINI_API_KEY")
@@ -50,7 +49,6 @@ def get_current_time(timezone: str = "America/Caracas"):
     except pytz.UnknownTimeZoneError:
         return {"error": "Zona horaria desconocida"}
 
-# ... (Todas las demás funciones de herramientas: get_weather, get_news, google_search, etc., van aquí sin cambios)
 def get_weather(city: str):
     """Obtiene el clima actual para una ciudad específica usando WeatherAPI.com."""
     if not weather_api_key: return {"error": "El servicio del clima no está configurado"}
@@ -63,6 +61,8 @@ def get_weather(city: str):
         return weather
     except requests.exceptions.RequestException:
         return {"error": f"No se pudo obtener el clima para {city}"}
+
+# ... (Aquí van el resto de tus funciones: get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, search_free_images, search_wikipedia, get_exchange_rate)
 def get_news(query: str):
     """Busca las 5 noticias más recientes sobre un tema específico."""
     if not news_api_key: return {"error": "El servicio de noticias no está configurado"}
@@ -201,8 +201,7 @@ def get_exchange_rate(base_currency: str = "USD", target_currency: str = "COP"):
     except Exception as e:
         return {"error": f"La consulta de divisas falló: {e}"}
 
-
-# --- LÓGICA DEL CLASIFICADOR DE INTENCIONES (NUESTRO MINI-CEREBRO) ---
+# --- LÓGICA DEL CLASIFICADOR DE INTENCIONES (NUESTRO "MINI-CEREBRO") ---
 def _collect_training_data():
     X, y = [], []
     for intent in INTENTS:
@@ -221,11 +220,12 @@ def make_intent_model():
     pipeline.fit(X, y)
     return pipeline
 
-# Entrenamos el modelo cuando la aplicación inicia
+# Entrenamos el modelo y preparamos las respuestas cuando la aplicación inicia
 INTENT_CLASSIFIER = make_intent_model()
+INTENT_RESPONSES = {intent['name']: intent.get('responses', []) for intent in INTENTS}
 
 def predict_intent(text: str):
-    """Clasifica la intención de un texto. Si no está seguro, devuelve 'fallback_to_gemini'."""
+    """Clasifica la intención. Si no está seguro, devuelve 'fallback_to_gemini'."""
     predictions = INTENT_CLASSIFIER.predict_proba([text.lower()])[0]
     max_proba_index = predictions.argmax()
     if predictions[max_proba_index] > 0.7: # Umbral de confianza
@@ -242,50 +242,36 @@ class ChatRequest(BaseModel): message: str; history: list[Message] | None = None
 class ImageRequest(BaseModel): prompt: str
 
 
-# --- Endpoint del Chat (REFACTORIZADO CON LÓGICA HÍBRIDA) ---
+# --- ENDPOINT DEL CHAT REFACTORIZADO CON LÓGICA HÍBRIDA ---
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     user_message = request.message
     
-    # 1. El mini-cerebro local intenta clasificar la pregunta
+    # === PASO 1: El "mini-cerebro" local intenta clasificar la pregunta ===
     intent = predict_intent(user_message)
     
-    # 2. Si es una intención simple, respondemos directamente
-    if intent == "saludo":
-        response_text = random.choice([resp for i in INTENTS if i["name"] == "saludo" for resp in i["responses"]])
-        return JSONResponse(content=[{"generated_text": response_text}])
-    
-    if intent == "despedida":
-        response_text = random.choice([resp for i in INTENTS if i["name"] == "despedida" for resp in i["responses"]])
-        return JSONResponse(content=[{"generated_text": response_text}])
-
-    if intent == "agradecimiento":
-        response_text = random.choice([resp for i in INTENTS if i["name"] == "agradecimiento" for resp in i["responses"]])
+    # === PASO 2: Si es una intención simple, respondemos directamente (rápido y barato) ===
+    # <<< CAMBIO APLICADO AQUÍ: Lógica unificada y más limpia >>>
+    if intent in ["saludo", "despedida", "agradecimiento"]:
+        response_text = random.choice(INTENT_RESPONSES[intent])
         return JSONResponse(content=[{"generated_text": response_text}])
 
     if intent == "hora":
-        time_data = get_current_time()
+        time_data = get_current_time() # Llama a la función local
         return JSONResponse(content=[{"generated_text": f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."}])
 
-    if intent == "fecha":
-        # Nota: Usando la hora del servidor. Para otras zonas horarias, se necesitaría una lógica más compleja.
-        now_caracas = datetime.now(pytz.timezone("America/Caracas"))
-        dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-        meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-        fecha_str = f"Hoy es {dias[now_caracas.weekday()]}, {now_caracas.day} de {meses[now_caracas.month - 1]} de {now_caracas.year}"
-        return JSONResponse(content=[{"generated_text": fecha_str}])
-
     if intent == "chiste":
-        joke_data = tell_joke()
-        return JSONResponse(content=[{"generated_text": joke_data.get('joke', 'Hoy no estoy de humor para chistes, mi pana.')}])
+        joke_data = tell_joke() # Llama a la función local
+        return JSONResponse(content=[{"generated_text": joke_data.get('joke', 'Hoy no estoy de humor para chistes.')}])
         
-    # 3. Si no es una intención simple (fallback), llamamos al cerebro principal: Gemini
+    # === PASO 3: Si no es simple (fallback), llamamos al cerebro principal: Gemini ===
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
         system_instruction = """
         Eres un asistente virtual llamado 'Fulano', con personalidad venezolana. Tu estilo debe ser amigable y pana, como si hablaras con un chamo. Usa jergas como 'chévere', 'mi pana', 'qué fino', 'dale pues'. Evita ser robótico. Sé útil, pero con un toque personal y cercano. Cuando una herramienta te devuelva información, como una lista de URLs de imágenes o noticias, tu trabajo es presentar esa información al usuario de forma clara y directa. No intentes 'mostrar' la imagen tú mismo, simplemente proporciona los enlaces o los datos que recibiste.
         """
         
+        # Le damos a Gemini acceso a todas las herramientas para máxima flexibilidad
         all_tools = [
             get_current_time, get_weather, get_news, google_search, translate_text, 
             calculate, rerank_documents, get_pokemon_info, search_marvel_character, 
@@ -319,13 +305,12 @@ def chat(request: ChatRequest):
         return JSONResponse(content=[{"generated_text": final_text}])
         
     except Exception as e:
-        print(f"Error en el endpoint de chat (Fallback a Gemini): {e}")
+        print(f"Error en el fallback a Gemini: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/generate-image")
 def generate_image(request: ImageRequest):
-    # ... (Este endpoint no cambia)
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
     try:
         model = genai.GenerativeModel('gemini-1.5-pro-latest')
