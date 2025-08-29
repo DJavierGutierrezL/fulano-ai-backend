@@ -146,4 +146,4 @@ def chat(request: ChatRequest):
         print(f"Error en el endpoint de chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ... (El endpoint de /api/generate-image no cambia)
+# ... (El endpoint de /api/generate-image no cambia)asdasd
