@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL COMPLETA Y VERIFICADA
+# main.py - VERSIÓN FINAL, COMPLETA Y VERIFICADA
 
 import os
 import requests
@@ -17,6 +17,7 @@ from asteval import Interpreter
 import time
 import hashlib
 import pokebase as pb
+from urllib.parse import quote
 
 # --- Configuración de APIs ---
 api_key = os.getenv("GEMINI_API_KEY")
@@ -33,6 +34,7 @@ if api_key:
 
 # --- Definición de Herramientas ---
 def get_current_time(timezone: str = "America/Caracas"):
+    """Devuelve la hora actual en una zona horaria específica."""
     try:
         tz = pytz.timezone(timezone)
         current_time = datetime.now(tz)
@@ -41,6 +43,7 @@ def get_current_time(timezone: str = "America/Caracas"):
         return {"error": "Zona horaria desconocida"}
 
 def get_weather(city: str):
+    """Obtiene el clima actual para una ciudad específica usando WeatherAPI.com."""
     if not weather_api_key: return {"error": "El servicio del clima no está configurado"}
     try:
         url = f"http://api.weatherapi.com/v1/current.json?key={weather_api_key}&q={city}&lang=es"
@@ -53,6 +56,7 @@ def get_weather(city: str):
         return {"error": f"No se pudo obtener el clima para {city}"}
 
 def get_news(query: str):
+    """Busca las 5 noticias más recientes sobre un tema específico."""
     if not news_api_key: return {"error": "El servicio de noticias no está configurado"}
     try:
         url = f"https://newsapi.org/v2/top-headlines?q={query}&language=es&pageSize=5&apiKey={news_api_key}"
@@ -65,6 +69,7 @@ def get_news(query: str):
         return {"error": f"No se pudieron obtener noticias sobre {query}"}
 
 def google_search(query: str):
+    """Realiza una búsqueda en Google para obtener una respuesta rápida a una pregunta."""
     if not serper_api_key: return {"error": "El servicio de búsqueda no está configurado"}
     try:
         url = "https://google.serper.dev/search"
@@ -80,6 +85,7 @@ def google_search(query: str):
         return {"error": f"La búsqueda de '{query}' falló."}
 
 def translate_text(text: str, target_language: str, source_language: str = "auto"):
+    """Traduce un texto de un idioma a otro."""
     try:
         url = f"https://api.mymemory.translated.net/get?q={text}&langpair={source_language}|{target_language}"
         response = requests.get(url, timeout=10)
@@ -90,6 +96,7 @@ def translate_text(text: str, target_language: str, source_language: str = "auto
         return {"error": "El servicio de traducción falló."}
 
 def calculate(expression: str):
+    """Evalúa una expresión matemática de forma segura."""
     try:
         aeval = Interpreter()
         result = aeval.eval(expression)
@@ -98,6 +105,7 @@ def calculate(expression: str):
         return {"error": f"Expresión matemática inválida: {e}"}
 
 def rerank_documents(query: str, documents: list[str]):
+    """Re-ordena una lista de documentos según su relevancia a una consulta, usando la API oficial de Cohere."""
     if not cohere_api_key: return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
     try:
         co = cohere.Client(cohere_api_key)
@@ -108,16 +116,20 @@ def rerank_documents(query: str, documents: list[str]):
         return {"error": f"El re-ranking de documentos con Cohere falló: {e}"}
 
 def get_pokemon_info(pokemon_name: str):
-    try:
-        pokemon = pb.pokemon(pokemon_name.lower())
-        types = [t.type.name for t in pokemon.types]
-        info = { "name": pokemon.name.capitalize(), "pokedex_id": pokemon.id, "height": f"{pokemon.height / 10} m", "weight": f"{pokemon.weight / 10} kg", "types": types }
-        return info
-    except Exception as e:
-        print(f"ERROR en la herramienta get_pokemon_info: {e}")
-        return {"error": f"No se encontró información para el Pokémon '{pokemon_name}'."}
+    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos."""
+    for attempt in range(3):
+        try:
+            pokemon = pb.pokemon(pokemon_name.lower())
+            types = [t.type.name for t in pokemon.types]
+            info = { "name": pokemon.name.capitalize(), "pokedex_id": pokemon.id, "height": f"{pokemon.height / 10} m", "weight": f"{pokemon.weight / 10} kg", "types": types }
+            return info
+        except Exception as e:
+            print(f"Intento {attempt + 1} para get_pokemon_info falló: {e}")
+            time.sleep(1)
+    return {"error": f"No se pudo contactar la PokéAPI para buscar a '{pokemon_name}' después de varios intentos."}
 
 def search_marvel_character(character_name: str):
+    """Busca un personaje en el universo de Marvel y devuelve su descripción."""
     if not marvel_public_key or not marvel_private_key: return {"error": "El servicio de Marvel no está configurado."}
     try:
         ts = str(time.time())
@@ -135,26 +147,37 @@ def search_marvel_character(character_name: str):
         return {"error": f"La búsqueda en Marvel falló: {e}"}
 
 def search_free_images(search_query: str):
+    """Busca imágenes gratuitas y sin derechos de autor sobre un tema específico."""
     if not rapidapi_key: return {"error": "El servicio de búsqueda de imágenes no está configurado."}
-    url = f"https://free-images-api.p.rapidapi.com/v1/search"
-    headers = { "X-RapidAPI-Key": rapidapi_key, "X-RapidAPI-Host": "free-images-api.p.rapidapi.com" }
-    params = { "query": search_query }
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=30)
+        encoded_query = quote(search_query)
+        url = f"https://free-images-api.p.rapidapi.com/images/{encoded_query}"
+        headers = { "X-RapidAPI-Key": rapidapi_key, "X-RapidAPI-Host": "free-images-api.p.rapidapi.com" }
+        response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json().get("results", [])
         if not data: return {"result": f"No se encontraron imágenes gratuitas para '{search_query}'."}
         image_urls = [img.get("url") for img in data[:3]]
         return {"image_urls": image_urls}
     except Exception as e:
+        print(f"ERROR en la herramienta search_free_images: {e}")
         return {"error": f"La búsqueda de imágenes falló: {e}"}
 
+# --- Configuración y Endpoints de FastAPI ---
 app = FastAPI(title="Asistente Virtual con Herramientas")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-class Message(BaseModel): id: str; text: str; sender: str
-class ChatRequest(BaseModel): message: str; history: list[Message] | None = None
-class ImageRequest(BaseModel): prompt: str
+class Message(BaseModel):
+    id: str
+    text: str
+    sender: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[Message] | None = None
+
+class ImageRequest(BaseModel):
+    prompt: str
 
 @app.post("/api/chat")
 def chat(request: ChatRequest):
