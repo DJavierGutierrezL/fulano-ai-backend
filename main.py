@@ -1,4 +1,4 @@
-# main.py - VERSIÓN FINAL, COMPLETA Y VERIFICADA
+# main.py - VERSIÓN FINAL COMPLETA CON PEXELS Y TODAS LAS HERRAMIENTAS
 
 import os
 import requests
@@ -17,7 +17,6 @@ from asteval import Interpreter
 import time
 import hashlib
 import pokebase as pb
-from urllib.parse import quote
 
 # --- Configuración de APIs ---
 api_key = os.getenv("GEMINI_API_KEY")
@@ -27,7 +26,7 @@ serper_api_key = os.getenv("SERPER_API_KEY")
 cohere_api_key = os.getenv("COHERE_API_KEY")
 marvel_public_key = os.getenv("MARVEL_PUBLIC_KEY")
 marvel_private_key = os.getenv("MARVEL_PRIVATE_KEY")
-rapidapi_key = os.getenv("RAPIDAPI_KEY")
+pexels_api_key = os.getenv("PEXELS_API_KEY")
 
 if api_key:
     genai.configure(api_key=api_key)
@@ -116,7 +115,7 @@ def rerank_documents(query: str, documents: list[str]):
         return {"error": f"El re-ranking de documentos con Cohere falló: {e}"}
 
 def get_pokemon_info(pokemon_name: str):
-    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos."""
+    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos. Es la herramienta principal para cualquier pregunta sobre información específica de un Pokémon."""
     for attempt in range(3):
         try:
             pokemon = pb.pokemon(pokemon_name.lower())
@@ -147,21 +146,23 @@ def search_marvel_character(character_name: str):
         return {"error": f"La búsqueda en Marvel falló: {e}"}
 
 def search_free_images(search_query: str):
-    """Busca imágenes gratuitas y sin derechos de autor sobre un tema específico."""
-    if not rapidapi_key: return {"error": "El servicio de búsqueda de imágenes no está configurado."}
+    """Busca imágenes gratuitas y de alta calidad sobre un tema específico usando la API de Pexels."""
+    if not pexels_api_key:
+        return {"error": "El servicio de búsqueda de imágenes Pexels no está configurado."}
     try:
-        encoded_query = quote(search_query)
-        url = f"https://free-images-api.p.rapidapi.com/images/{encoded_query}"
-        headers = { "X-RapidAPI-Key": rapidapi_key, "X-RapidAPI-Host": "free-images-api.p.rapidapi.com" }
-        response = requests.get(url, headers=headers, timeout=30)
+        url = "https://api.pexels.com/v1/search"
+        headers = {"Authorization": pexels_api_key}
+        params = {"query": search_query, "per_page": 3, "locale": "es-ES"}
+        response = requests.get(url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
-        data = response.json().get("results", [])
-        if not data: return {"result": f"No se encontraron imágenes gratuitas para '{search_query}'."}
-        image_urls = [img.get("url") for img in data[:3]]
+        data = response.json().get("photos", [])
+        if not data:
+            return {"result": f"No se encontraron imágenes en Pexels para '{search_query}'."}
+        image_urls = [photo.get("src", {}).get("medium") for photo in data]
         return {"image_urls": image_urls}
     except Exception as e:
-        print(f"ERROR en la herramienta search_free_images: {e}")
-        return {"error": f"La búsqueda de imágenes falló: {e}"}
+        print(f"ERROR en la herramienta search_free_images (Pexels): {e}")
+        return {"error": f"La búsqueda de imágenes en Pexels falló: {e}"}
 
 # --- Configuración y Endpoints de FastAPI ---
 app = FastAPI(title="Asistente Virtual con Herramientas")
