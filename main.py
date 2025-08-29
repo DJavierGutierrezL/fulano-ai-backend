@@ -1,11 +1,11 @@
-# main.py - VERSIÓN FINAL, COMPLETA Y FUNCIONAL
+# main.py - VERSIÓN CON CORRECCIÓN DE SINTAXIS FINAL
 
 import os
 import requests
 from datetime import datetime
 import pytz 
 import google.generativeai as genai
-import google.generativeai.protos as protos
+from google.generativeai.types import Part
 import cohere
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -54,7 +54,7 @@ def get_weather(city: str):
 def get_news(query: str):
     if not news_api_key: return {"error": "El servicio de noticias no está configurado"}
     try:
-        url = f"https://newsapi.org/v2/top-headlines?q={query}&language=es&pageSize=3&apiKey={news_api_key}"
+        url = f"https://newsapi.org/v2/top-headlines?q={query}&language=es&pageSize=5&apiKey={news_api_key}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
@@ -72,10 +72,8 @@ def google_search(query: str):
         response = requests.post(url, headers=headers, data=payload, timeout=10)
         response.raise_for_status()
         data = response.json()
-        if "answerBox" in data:
-            return {"result": data["answerBox"].get("answer") or data["answerBox"].get("snippet")}
-        if "organic" in data and len(data["organic"]) > 0:
-            return {"result": data["organic"][0].get("snippet")}
+        if "answerBox" in data: return {"result": data["answerBox"].get("answer") or data["answerBox"].get("snippet")}
+        if "organic" in data and len(data["organic"]) > 0: return {"result": data["organic"][0].get("snippet")}
         return {"result": "No se encontró una respuesta directa."}
     except requests.exceptions.RequestException:
         return {"error": f"La búsqueda de '{query}' falló."}
@@ -99,10 +97,16 @@ def calculate(expression: str):
         return {"error": f"Expresión matemática inválida: {e}"}
 
 def rerank_documents(query: str, documents: list[str]):
-    if not cohere_api_key: return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
+    if not cohere_api_key: 
+        return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
     try:
         co = cohere.Client(cohere_api_key)
-        response = co.rerank(model='rerank-multilingual-v3.0', query=query, documents=documents, top_n=3)
+        response = co.rerank(
+            model='rerank-multilingual-v3.0',
+            query=query,
+            documents=documents,
+            top_n=3
+        )
         ranked_results = [{"document": result.document['text']} for result in response.results]
         return {"ranked_results": ranked_results}
     except Exception as e:
@@ -133,24 +137,17 @@ def search_marvel_character(character_name: str):
     except Exception as e:
         return {"error": f"La búsqueda en Marvel falló: {e}"}
 
-# --- Configuración de FastAPI ---
+# --- Configuración y Endpoints de FastAPI ---
 app = FastAPI(title="Asistente Virtual con Herramientas")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+class Message(BaseModel): id: str; text: str; sender: str
+class ChatRequest(BaseModel): message: str; history: list[Message] | None = None
+class ImageRequest(BaseModel): prompt: str
 
-# --- Modelos de Datos ---
-class Message(BaseModel):
-    id: str; text: str; sender: str
-
-class ChatRequest(BaseModel):
-    message: str; history: list[Message] | None = None
-
-class ImageRequest(BaseModel):
-    prompt: str
-
-# --- Endpoints ---
 @app.post("/api/chat")
 def chat(request: ChatRequest):
     if not api_key: raise HTTPException(status_code=500, detail="El servicio de IA no está configurado.")
+    
     try:
         system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
         
@@ -165,4 +162,31 @@ def chat(request: ChatRequest):
         response = chat_session.send_message(request.message)
         
         function_call = response.candidates[0].content.parts[0].function_call
-        if function_call
+        # ESTA ES LA LÍNEA QUE CORREGIMOS (añadimos los dos puntos ':')
+        if function_call:
+            tool_name = function_call.name
+            tool_args = {key: value for key, value in function_call.args.items()}
+            tool_result = None
+            
+            if tool_name == "get_current_time": tool_result = get_current_time(**tool_args)
+            elif tool_name == "get_weather": tool_result = get_weather(**tool_args)
+            elif tool_name == "get_news": tool_result = get_news(**tool_args)
+            elif tool_name == "google_search": tool_result = google_search(**tool_args)
+            elif tool_name == "translate_text": tool_result = translate_text(**tool_args)
+            elif tool_name == "calculate": tool_result = calculate(**tool_args)
+            elif tool_name == "rerank_documents": tool_result = rerank_documents(**tool_args)
+            elif tool_name == "get_pokemon_info": tool_result = get_pokemon_info(**tool_args)
+            elif tool_name == "search_marvel_character": tool_result = search_marvel_character(**tool_args)
+            
+            response = chat_session.send_message(
+                Part(function_response=genai.protos.FunctionResponse(name=tool_name, response=tool_result))
+            )
+
+        final_text = "".join(part.text for part in response.parts)
+        return JSONResponse(content=[{"generated_text": final_text}])
+        
+    except Exception as e:
+        print(f"Error en el endpoint de chat: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ... (El endpoint de /api/generate-image no cambia)
