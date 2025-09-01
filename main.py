@@ -1,17 +1,18 @@
-# main.py - VERSIÓN CORREGIDA CON INTENTS + GEMINI FALLBACK
+# main.py - VERSIÓN CORREGIDA CON INTENTS + TOOLS + GEMINI FALLBACK
 
 import os
 import random
-import requests
 from datetime import datetime
 import pytz
 import google.generativeai as genai
 import google.generativeai.protos as protos
 import cohere
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import models, crud, database
+
+# Importar intents y herramientas
 from intents import predict_intent, INTENT_RESPONSES
 from tools import (
     get_current_time, get_weather, get_news, google_search, translate_text,
@@ -19,14 +20,14 @@ from tools import (
     search_free_images, search_wikipedia, get_exchange_rate, extract_city
 )
 
-# Inicializar FastAPI
+# ==========================
+# Inicialización
+# ==========================
 app = FastAPI()
 
-# Inicializar Gemini y Cohere
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 co = cohere.Client(os.getenv("COHERE_API_KEY"))
 
-# Base de datos
 @app.on_event("startup")
 def on_startup():
     models.Base.metadata.create_all(bind=database.engine)
@@ -53,7 +54,6 @@ def chat(request: models.ChatRequest, db: Session = Depends(database.get_db)):
         response_text = random.choice(INTENT_RESPONSES[intent])
 
     elif intent == "hora":
-        # Hora de Colombia
         colombia_tz = pytz.timezone("America/Bogota")
         now = datetime.now(colombia_tz)
         response_text = f"La hora en Colombia es {now.strftime('%H:%M:%S')}."
@@ -79,7 +79,7 @@ def chat(request: models.ChatRequest, db: Session = Depends(database.get_db)):
     else:
         handled_by_gemini = True
         try:
-            # Historial de conversación
+            # Historial
             db_messages = crud.get_messages_by_conversation(db, conversation_id=conversation.id)
             history_for_gemini = [
                 {"role": ("user" if msg.sender == "user" else "model"),
@@ -103,7 +103,7 @@ def chat(request: models.ChatRequest, db: Session = Depends(database.get_db)):
             chat_session = model.start_chat(history=history_for_gemini)
             response = chat_session.send_message(request.message)
 
-            # Intentar ejecutar función si Gemini lo pide
+            # Intentar función
             try:
                 function_call = response.candidates[0].content.parts[0].function_call
                 if function_call:
@@ -118,7 +118,7 @@ def chat(request: models.ChatRequest, db: Session = Depends(database.get_db)):
             except Exception:
                 pass
 
-            # Extraer texto seguro
+            # Texto limpio
             response_text = "".join(
                 part.text for part in response.candidates[0].content.parts if hasattr(part, "text")
             )
@@ -127,7 +127,7 @@ def chat(request: models.ChatRequest, db: Session = Depends(database.get_db)):
             print(f"Error con Gemini: {e}")
             response_text = "Lo siento, mi pana, mi cerebro se pegó otra vez."
 
-    # Guardar respuesta en DB
+    # Guardar en DB
     crud.create_message(db, conversation=conversation, sender="bot", content=response_text, handled_by_gemini=handled_by_gemini)
 
     return JSONResponse(content={"generated_text": response_text, "conversation_id": conversation.id})
