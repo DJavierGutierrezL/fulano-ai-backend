@@ -24,6 +24,3 @@ class Message(Base):
     handled_by_gemini = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     conversation = relationship("Conversation", back_populates="messages")
-
-# Crea las tablas en la base de datos si no existen
-Base.metadata.create_all(bind=engine)

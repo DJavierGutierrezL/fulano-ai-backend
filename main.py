@@ -27,8 +27,7 @@ from sqlalchemy.orm import Session
 # Importaciones locales
 from intents import INTENTS
 import models, crud, database
-from database import get_db
-
+from database import get_db, engine
 # Crea las tablas en la base de datos si no existen al iniciar la app
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -263,6 +262,11 @@ class FaceSwapRequest(BaseModel):
     source_image_url: str
     target_image_url: str
 
+# --- EVENTO DE ARRANQUE PARA CREAR TABLAS DE FORMA SEGURA ---
+@app.on_event("startup")
+def on_startup():
+    # Este código se ejecuta solo cuando la aplicación está lista para iniciarse
+    models.Base.metadata.create_all(bind=engine)
 @app.post("/api/chat")
 def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
     conversation = crud.get_or_create_conversation(db, conversation_id=request.conversation_id)
