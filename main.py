@@ -1,4 +1,5 @@
-# main.py - VERSIÓN FINAL CON BASE DE DATOS
+# main.py - VERSIÓN FINAL, COMPLETA Y VERIFICADA
+
 import os
 import requests
 from datetime import datetime
@@ -28,7 +29,7 @@ from intents import INTENTS
 import models, crud, database
 from database import get_db
 
-# Crea las tablas en la DB al iniciar la app
+# Crea las tablas en la base de datos si no existen al iniciar la app
 models.Base.metadata.create_all(bind=database.engine)
 
 # --- Configuración de APIs ---
@@ -47,6 +48,7 @@ if api_key:
 
 # --- Definición de Herramientas ---
 def get_current_time(timezone: str = "America/Caracas"):
+    """Devuelve la hora actual en una zona horaria específica."""
     try:
         tz = pytz.timezone(timezone)
         current_time = datetime.now(tz)
@@ -55,6 +57,7 @@ def get_current_time(timezone: str = "America/Caracas"):
         return {"error": "Zona horaria desconocida"}
 
 def get_weather(city: str):
+    """Obtiene el clima actual para una ciudad específica usando WeatherAPI.com."""
     if not weather_api_key: return {"error": "El servicio del clima no está configurado"}
     try:
         url = f"http://api.weatherapi.com/v1/current.json?key={weather_api_key}&q={city}&lang=es"
@@ -67,6 +70,7 @@ def get_weather(city: str):
         return {"error": f"No se pudo obtener el clima para {city}"}
 
 def get_news(query: str):
+    """Busca las 3 noticias más recientes sobre un tema específico usando GNews."""
     if not gnews_api_key: return {"error": "El servicio de noticias no está configurado"}
     try:
         url = f"https://gnews.io/api/v4/search?q={query}&lang=es&max=3&apikey={gnews_api_key}"
@@ -80,6 +84,7 @@ def get_news(query: str):
         return {"error": f"No se pudieron obtener noticias sobre {query}"}
 
 def google_search(query: str):
+    """Realiza una búsqueda en Google para obtener una respuesta rápida a una pregunta."""
     if not serper_api_key: return {"error": "El servicio de búsqueda no está configurado"}
     try:
         url = "https://google.serper.dev/search"
@@ -95,6 +100,7 @@ def google_search(query: str):
         return {"error": f"La búsqueda de '{query}' falló."}
 
 def translate_text(text: str, target_language: str, source_language: str = "auto"):
+    """Traduce un texto de un idioma a otro."""
     try:
         url = f"https://api.mymemory.translated.net/get?q={text}&langpair={source_language}|{target_language}"
         response = requests.get(url, timeout=10)
@@ -105,6 +111,7 @@ def translate_text(text: str, target_language: str, source_language: str = "auto
         return {"error": "El servicio de traducción falló."}
 
 def calculate(expression: str):
+    """Evalúa una expresión matemática de forma segura."""
     try:
         aeval = Interpreter()
         result = aeval.eval(expression)
@@ -113,6 +120,7 @@ def calculate(expression: str):
         return {"error": f"Expresión matemática inválida: {e}"}
 
 def rerank_documents(query: str, documents: list[str]):
+    """Re-ordena una lista de documentos según su relevancia a una consulta, usando la API oficial de Cohere."""
     if not cohere_api_key: return {"error": "El servicio de Re-ranking de Cohere no está configurado."}
     try:
         co = cohere.Client(cohere_api_key)
@@ -123,6 +131,7 @@ def rerank_documents(query: str, documents: list[str]):
         return {"error": f"El re-ranking de documentos con Cohere falló: {e}"}
 
 def get_pokemon_info(pokemon_name: str):
+    """Busca un Pokémon por su nombre en una Pokédex y devuelve sus datos clave como ID, altura, peso y tipos. Es la herramienta principal para cualquier pregunta sobre información específica de un Pokémon."""
     for attempt in range(3):
         try:
             pokemon = pb.pokemon(pokemon_name.lower())
@@ -132,9 +141,10 @@ def get_pokemon_info(pokemon_name: str):
         except Exception as e:
             print(f"Intento {attempt + 1} para get_pokemon_info falló: {e}")
             time.sleep(1)
-    return {"error": f"No se pudo contactar la PokéAPI para buscar a '{pokemon_name}'."}
+    return {"error": f"No se pudo contactar la PokéAPI para buscar a '{pokemon_name}' después de varios intentos."}
 
 def search_marvel_character(character_name: str):
+    """Busca un personaje en el universo de Marvel y devuelve su descripción."""
     if not marvel_public_key or not marvel_private_key: return {"error": "El servicio de Marvel no está configurado."}
     try:
         ts = str(time.time())
@@ -152,7 +162,8 @@ def search_marvel_character(character_name: str):
         return {"error": f"La búsqueda en Marvel falló: {e}"}
 
 def search_free_images(search_query: str):
-    if not pexels_api_key: return {"error": "El servicio de Pexels no está configurado."}
+    """Busca imágenes gratuitas y de alta calidad sobre un tema específico usando la API de Pexels."""
+    if not pexels_api_key: return {"error": "El servicio de búsqueda de imágenes Pexels no está configurado."}
     try:
         url = "https://api.pexels.com/v1/search"
         headers = {"Authorization": pexels_api_key}
@@ -168,6 +179,7 @@ def search_free_images(search_query: str):
         return {"error": f"La búsqueda de imágenes en Pexels falló: {e}"}
 
 def search_wikipedia(topic: str):
+    """Busca un tema en Wikipedia y devuelve un resumen del artículo."""
     try:
         wiki_wiki = wikipediaapi.Wikipedia('es', user_agent='FulanoAI/1.0')
         page = wiki_wiki.page(topic)
@@ -178,6 +190,7 @@ def search_wikipedia(topic: str):
         return {"error": f"La búsqueda en Wikipedia falló: {e}"}
         
 def tell_joke():
+    """Cuenta un chiste al azar en español."""
     try:
         response = requests.get("https://v2.jokeapi.dev/joke/Any?lang=es&type=single", timeout=10)
         response.raise_for_status()
@@ -188,6 +201,7 @@ def tell_joke():
         return {"error": f"La API de chistes falló: {e}"}
 
 def get_exchange_rate(base_currency: str = "USD", target_currency: str = "COP"):
+    """Obtiene la tasa de cambio actual entre dos monedas."""
     try:
         url = f"https://open.er-api.com/v6/latest/{base_currency.upper()}"
         response = requests.get(url, timeout=10)
@@ -287,7 +301,9 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
                 tools_map = {tool.__name__: tool for tool in all_tools}
                 if tool_name in tools_map:
                     tool_result = tools_map[tool_name](**tool_args)
-                    response = chat_session.send_message(protos.FunctionResponse(name=tool_name, response=tool_result))
+                    response = chat_session.send_message(
+                        protos.FunctionResponse(name=tool_name, response=tool_result)
+                    )
 
             final_text = "".join(part.text for part in response.parts)
             response_text = final_text
@@ -301,7 +317,6 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
 @app.get("/api/history/{conversation_id}", response_model=list[PydanticMessage])
 def get_history(conversation_id: str, db: Session = Depends(database.get_db)):
     db_messages = crud.get_messages_by_conversation(db, conversation_id=conversation_id)
-    # El frontend espera 'text', pero nuestro modelo de DB usa 'content'
     return [{"id": msg.id, "text": msg.content, "sender": msg.sender} for msg in db_messages]
 
 @app.post("/api/generate-image")
