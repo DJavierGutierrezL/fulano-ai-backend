@@ -1,5 +1,4 @@
-# main.py - VERSIÓN FINAL CON BASE DE DATOS INTEGRADA
-
+# main.py - VERSIÓN FINAL CON BASE DE DATOS
 import os
 import requests
 from datetime import datetime
@@ -24,12 +23,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sqlalchemy.orm import Session
 
-# Importaciones locales para la base de datos y el NLU
+# Importaciones locales
 from intents import INTENTS
 import models, crud, database
 from database import get_db
 
-# Crea las tablas en la base de datos si no existen al iniciar la app
+# Crea las tablas en la DB al iniciar la app
 models.Base.metadata.create_all(bind=database.engine)
 
 # --- Configuración de APIs ---
@@ -201,7 +200,6 @@ def get_exchange_rate(base_currency: str = "USD", target_currency: str = "COP"):
     except Exception as e:
         return {"error": f"La consulta de divisas falló: {e}"}
 
-
 # --- LÓGICA DEL CLASIFICADOR DE INTENCIONES ---
 def _collect_training_data():
     X, y = [], []
@@ -303,6 +301,7 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
 @app.get("/api/history/{conversation_id}", response_model=list[PydanticMessage])
 def get_history(conversation_id: str, db: Session = Depends(database.get_db)):
     db_messages = crud.get_messages_by_conversation(db, conversation_id=conversation_id)
+    # El frontend espera 'text', pero nuestro modelo de DB usa 'content'
     return [{"id": msg.id, "text": msg.content, "sender": msg.sender} for msg in db_messages]
 
 @app.post("/api/generate-image")

@@ -7,6 +7,7 @@ def get_or_create_conversation(db: Session, conversation_id: str = None) -> mode
         conversation = db.query(models.Conversation).filter(models.Conversation.id == conversation_id).first()
         if conversation:
             return conversation
+    
     new_conversation = models.Conversation()
     db.add(new_conversation)
     db.commit()
@@ -14,7 +15,11 @@ def get_or_create_conversation(db: Session, conversation_id: str = None) -> mode
     return new_conversation
 
 def create_message(db: Session, conversation: models.Conversation, sender: str, content: str, handled_by_gemini: bool = False):
-    new_message = models.Message(sender=sender, content=content, handled_by_gemini=handled_by_gemini)
+    new_message = models.Message(
+        sender=sender,
+        content=content,
+        handled_by_gemini=handled_by_gemini
+    )
     conversation.messages.append(new_message)
     db.commit()
     db.refresh(new_message)
