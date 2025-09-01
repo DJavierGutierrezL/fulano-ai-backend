@@ -4,16 +4,13 @@ import os
 import requests
 from datetime import datetime
 import pytz
-
+import re
+from datetime import datetime
+import pytz
 # ==========================
 # Herramientas básicas
 # ==========================
 
-def get_current_time():
-    """Devuelve la hora actual en Colombia"""
-    colombia_tz = pytz.timezone("America/Bogota")
-    now = datetime.now(colombia_tz)
-    return {"time": now.strftime("%H:%M:%S")}
 
 def get_weather(city: str = "Bogotá"):
     """Consulta el clima actual usando la API de OpenWeatherMap"""
@@ -126,3 +123,36 @@ def extract_city(text: str):
         if ciudad in text.lower():
             return ciudad
     return "Bogotá"
+# ==========================
+# Herramienta: Calcular operaciones matemáticas
+# ==========================
+def calculate(expression: str):
+    """
+    Evalúa operaciones matemáticas básicas desde el texto del usuario.
+    Ejemplo:
+        "8 * 8" -> 64
+        "100 / 5" -> 20
+    """
+    try:
+        # Extraer solo números y operadores permitidos
+        match = re.findall(r"[0-9\.\+\-\*\/\(\)]+", expression)
+        safe_expression = "".join(match)
+        if not safe_expression:
+            return "Expresión inválida."
+
+        result = eval(safe_expression)
+        return result
+    except Exception:
+        return "No pude calcular eso."
+
+
+# ==========================
+# Herramienta: Hora actual en Colombia
+# ==========================
+def get_current_time():
+    """
+    Retorna la hora actual en Colombia.
+    """
+    colombia_tz = pytz.timezone("America/Bogota")
+    now = datetime.now(colombia_tz)
+    return now.strftime("%H:%M:%S")
