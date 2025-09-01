@@ -1,26 +1,45 @@
-# models.py
-import os
-from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey
-from sqlalchemy.orm import relationship
-from database import Base, engine
-import uuid
+from pydantic import BaseModel
+from typing import Optional
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
 
-def generate_uuid():
-    return str(uuid.uuid4())
+# Base de SQLAlchemy
+Base = declarative_base()
+
+# ==========================
+# 📌 MODELOS Pydantic (Request/Response)
+# ==========================
+
+class ChatRequest(BaseModel):
+    conversation_id: Optional[str] = None  # ID opcional para continuar conversación
+    message: str                           # Mensaje del usuario
+
+
+# ==========================
+# 📌 MODELOS SQLAlchemy (BD)
+# ==========================
 
 class Conversation(Base):
     __tablename__ = "conversations"
-    id = Column(String, primary_key=True, default=generate_uuid)
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String, unique=True, index=True)  # UUID que identifica conversación
     created_at = Column(DateTime, default=datetime.utcnow)
-    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+
+    # Relación con mensajes
+    messages = relationship("Message", back_populates="conversation")
+
 
 class Message(Base):
     __tablename__ = "messages"
-    id = Column(String, primary_key=True, default=generate_uuid)
-    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
-    sender = Column(String, nullable=False) # 'user' o 'bot'
-    content = Column(Text, nullable=False)
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    sender = Column(String)  # "user" o "bot"
+    content = Column(Text)
     handled_by_gemini = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    # Relación con conversación
     conversation = relationship("Conversation", back_populates="messages")
