@@ -286,26 +286,22 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
     response_text = ""
     handled_by_gemini = False
 
-    if intent in ["saludo", "despedida", "agradecimiento", "hora", "chiste"]:
+    if intent in ["saludo", "despedida", "agradecimiento", "clima", "hora", "chiste"]:
         response_text = random.choice(INTENT_RESPONSES[intent])
     elif intent == "hora":
-        time_data = get_current_time()
-        response_text = f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."
+    time_data = get_current_time()
+    response_text = f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."
     elif intent == "clima":
-        print("DEBUG: Intención 'clima' reconocida por el mini-cerebro.")
         city = extract_city(request.message)
         weather_data = get_weather(city)
-        
         if "error" in weather_data:
-            response_text = "¡Qué vaina! No pude conseguir el clima en este momento. Intenta más tarde."
+            response_text = "¡Qué vaina! No pude conseguir el clima en este momento."
         else:
-            response_text = f"¡Chévere! En {weather_data['city']}, la temperatura es de {weather_data['temperature']} con {weather_data['description']}."
-    
-    else: # Fallback a Gemini
-        handled_by_gemini = True
+            response_text = f"En {weather_data['city']} la temperatura es {weather_data['temperature']} con {weather_data['description']}."
     elif intent == "chiste":
-        joke_data = tell_joke()
-        response_text = joke_data.get('joke', 'Hoy no estoy de humor para chistes.')
+        response_text = get_simple_response(intent)
+    else:
+        response_text = "No entendí bien, ¿me repites?"
     else:
         handled_by_gemini = True
         try:
