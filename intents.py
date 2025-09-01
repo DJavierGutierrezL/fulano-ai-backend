@@ -227,6 +227,72 @@ INTENTS = [
             "Si tienes hambre, ataca esa nevera. Y si no hay nada, te busco una receta fácil para que resuelvas.",
             "¡Cuidado te desmayas! ¿Te busco pizzerías cerca o prefieres algo más criollo?"
         ]
-    }
+    },
+    {
+        "name": "clima",
+        "examples": [
+            # Preguntas directas
+            "qué clima hace",
+            "cómo está el clima",
+            "dime el tiempo",
+            "cuál es el pronóstico",
+            "el clima por favor",
+            "reporte del clima",
+            # Con ciudad explícita
+            "clima en Medellín",
+            "qué temperatura hay en Bogotá",
+            "cómo está el clima en medellin",
+            "dime el tiempo para medellin",
+            "temperatura en cali",
+            "clima para envigado",
+            # Preguntas funcionales
+            "va a llover hoy",
+            "necesito paraguas",
+            "hará frío hoy",
+            "qué tal está el día",
+            "cómo está el tiempo afuera",
+            "va a hacer calor",
+            "debería llevar chaqueta",
+            # Con jerga
+            "qué tal el clima pana",
+            "va a caer un palo de agua",
+            "qué calor hace",
+            "qué frío vale",
+            "y el clima qué",
+        ]
+    },
+    {
+        "name": "hora",
+        "examples": [
+            # Preguntas directas
+            "qué hora es",
+            "la hora",
+            "dime la hora",
+            "qué hora tienes",
+            "la hora por favor",
+            "me dices la hora",
+            "hora actual",
+            # Con cortesía
+            "podrías decirme la hora",
+            "me das la hora por favor",
+            "serías tan amable de decirme la hora",
+            "disculpa, qué hora es",
+            # Con jerga
+            "qué hora es mi pana",
+            "epa, la hora",
+            "qué hora marca el reloj",
+            "ando perdido en el tiempo, dime la hora",
+            "hora local",
+            # Variaciones
+            "el tiempo ahora",
+            "qué hora es en este momento",
+            "me regalas la hora",
+            "necesito saber la hora",
+            "a qué hora estamos",
+            "tienes la hora",
+            "me puedes dar la hora",
+        ]
+    },
+
     # ... Puedes seguir añadiendo más intenciones aquí ...
 ]

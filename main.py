@@ -55,6 +55,16 @@ def get_current_time(timezone: str = "America/Caracas"):
     except pytz.UnknownTimeZoneError:
         return {"error": "Zona horaria desconocida"}
 
+# --- NUEVA FUNCIÓN: EXTRACTOR DE ENTIDADES (CIUDADES) ---
+def extract_city(text: str) -> str:
+    """Extrae un nombre de ciudad de un texto usando expresiones regulares."""
+    # Busca patrones como "en [Ciudad]", "de [Ciudad]", "para [Ciudad]"
+    match = re.search(r"\b(en|de|para)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)", text)
+    if match:
+        return match.group(2).strip()
+    # Si no encuentra un patrón, devuelve una ciudad por defecto o None
+    return "Caracas" 
+
 def get_weather(city: str):
     """Obtiene el clima actual para una ciudad específica usando WeatherAPI.com."""
     if not weather_api_key: return {"error": "El servicio del clima no está configurado"}
@@ -276,11 +286,23 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
     response_text = ""
     handled_by_gemini = False
 
-    if intent in ["saludo", "despedida", "agradecimiento"]:
+    if intent in ["saludo", "despedida", "agradecimiento", "hora", "chiste"]:
         response_text = random.choice(INTENT_RESPONSES[intent])
     elif intent == "hora":
         time_data = get_current_time()
         response_text = f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."
+     elif intent == "clima":
+        print("DEBUG: Intención 'clima' reconocida por el mini-cerebro.")
+        city = extract_city(request.message)
+        weather_data = get_weather(city)
+        
+        if "error" in weather_data:
+            response_text = "¡Qué vaina! No pude conseguir el clima en este momento. Intenta más tarde."
+        else:
+            response_text = f"¡Chévere! En {weather_data['city']}, la temperatura es de {weather_data['temperature']} con {weather_data['description']}."
+    
+    else: # Fallback a Gemini
+        handled_by_gemini = True
     elif intent == "chiste":
         joke_data = tell_joke()
         response_text = joke_data.get('joke', 'Hoy no estoy de humor para chistes.')
