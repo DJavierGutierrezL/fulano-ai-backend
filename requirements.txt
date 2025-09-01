@@ -10,3 +10,5 @@ wikipedia-api
 scikit-learn
 sqlalchemy
 psycopg2-binary
+python-dotenv
+pydantic
