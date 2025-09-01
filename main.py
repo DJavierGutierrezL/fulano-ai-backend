@@ -12,22 +12,27 @@ from intents import predict_intent, INTENT_RESPONSES
 from tools import calculate
 from fastapi.middleware.cors import CORSMiddleware
 
-# ==========================
-# Inicializar FastAPI
-# ==========================
 app = FastAPI(
     title="Fulano AI Backend",
     description="Asistente virtual con memoria y manejo de intents",
     version="1.0.0"
 )
 
-@app.add_middleware(
+# Orígenes permitidos (frontend local y producción)
+origins = [
+    "http://localhost:5173",  # frontend local
+    "https://fulano-ai.onrender.com"  # frontend desplegado en Render
+]
+
+# Middleware de CORS
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 👈 En desarrollo lo dejamos abierto
+    allow_origins=origins,      # permite estos orígenes
     allow_credentials=True,
-    allow_methods=["*"],  # 👈 Esto incluye OPTIONS, POST, GET, etc.
-    allow_headers=["*"],
+    allow_methods=["*"],        # permite GET, POST, OPTIONS, etc.
+    allow_headers=["*"],        # permite todos los headers
 )
+
 # ==========================
 # Evento al iniciar (crear tablas si no existen)
 # ==========================
