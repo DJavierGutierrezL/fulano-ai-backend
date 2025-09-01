@@ -291,7 +291,7 @@ def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
     elif intent == "hora":
         time_data = get_current_time()
         response_text = f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."
-     elif intent == "clima":
+    elif intent == "clima":
         print("DEBUG: Intención 'clima' reconocida por el mini-cerebro.")
         city = extract_city(request.message)
         weather_data = get_weather(city)
