@@ -273,68 +273,64 @@ class FaceSwapRequest(BaseModel):
     target_image_url: str
 
 # --- EVENTO DE ARRANQUE PARA CREAR TABLAS DE FORMA SEGURA ---
-@app.on_event("startup")
-def on_startup():
-    # Este código se ejecuta solo cuando la aplicación está lista para iniciarse
-    models.Base.metadata.create_all(bind=engine)
-@app.post("/api/chat")
-def chat(request: ChatRequest, db: Session = Depends(database.get_db)):
-    conversation = crud.get_or_create_conversation(db, conversation_id=request.conversation_id)
-    crud.create_message(db, conversation=conversation, sender='user', content=request.message)
-    
-    intent = predict_intent(request.message)
-    response_text = ""
-    handled_by_gemini = False
+if intent in ["saludo", "despedida", "agradecimiento", "chiste"]:
+    response_text = random.choice(INTENT_RESPONSES[intent])
 
-    if intent in ["saludo", "despedida", "agradecimiento", "clima", "hora", "chiste"]:
-        response_text = random.choice(INTENT_RESPONSES[intent])
-    elif intent == "hora":
+elif intent == "hora":
     time_data = get_current_time()
     response_text = f"¡Claro! La hora es {time_data.get('time', 'desconocida')}."
-    elif intent == "clima":
-        city = extract_city(request.message)
-        weather_data = get_weather(city)
-        if "error" in weather_data:
-            response_text = "¡Qué vaina! No pude conseguir el clima en este momento."
-        else:
-            response_text = f"En {weather_data['city']} la temperatura es {weather_data['temperature']} con {weather_data['description']}."
-    elif intent == "chiste":
-        response_text = get_simple_response(intent)
-    else:
-        response_text = "No entendí bien, ¿me repites?"
-    else:
-        handled_by_gemini = True
-        try:
-            db_messages = crud.get_messages_by_conversation(db, conversation_id=conversation.id)
-            history_for_gemini = [{"role": ("user" if msg.sender == 'user' else "model"), "parts": [{"text": msg.content}]} for msg in db_messages]
-            
-            all_tools = [get_current_time, get_weather, get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, search_free_images, search_wikipedia, get_exchange_rate]
-            system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
-            
-            model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_instruction, tools=all_tools)
-            chat_session = model.start_chat(history=history_for_gemini)
-            response = chat_session.send_message(request.message)
-            
-            function_call = response.candidates[0].content.parts[0].function_call
-            if function_call:
-                tool_name = function_call.name
-                tool_args = {key: value for key, value in function_call.args.items()}
-                
-                tools_map = {tool.__name__: tool for tool in all_tools}
-                if tool_name in tools_map:
-                    tool_result = tools_map[tool_name](**tool_args)
-                    response = chat_session.send_message(
-                        protos.FunctionResponse(name=tool_name, response=tool_result)
-                    )
 
-            final_text = "".join(part.text for part in response.parts)
-            response_text = final_text
-        except Exception as e:
-            print(f"Error en el fallback a Gemini: {e}")
-            response_text = "Lo siento, mi pana, pero algo falló con mi cerebro principal. Inténtalo de nuevo."
+elif intent == "clima":
+    city = extract_city(request.message)
+    weather_data = get_weather(city)
+    if "error" in weather_data:
+        response_text = "¡Qué vaina! No pude conseguir el clima en este momento."
+    else:
+        response_text = f"En {weather_data['city']} la temperatura es {weather_data['temperature']} con {weather_data['description']}."
 
-    crud.create_message(db, conversation=conversation, sender='bot', content=response_text, handled_by_gemini=handled_by_gemini)
-    return JSONResponse(content={"generated_text": response_text, "conversation_id": conversation.id})
+else:
+    handled_by_gemini = True
+    try:
+        db_messages = crud.get_messages_by_conversation(db, conversation_id=conversation.id)
+        history_for_gemini = [
+            {"role": ("user" if msg.sender == 'user' else "model"), "parts": [{"text": msg.content}]}
+            for msg in db_messages
+        ]
+        
+        all_tools = [get_current_time, get_weather, get_news, google_search, translate_text, calculate, 
+                     rerank_documents, get_pokemon_info, search_marvel_character, search_free_images, 
+                     search_wikipedia, get_exchange_rate]
+        
+        system_instruction = "Eres un asistente virtual llamado 'Fulano', con personalidad venezolana..."
+        
+        model = genai.GenerativeModel(
+            'gemini-1.5-flash-latest',
+            system_instruction=system_instruction,
+            tools=all_tools
+        )
+        
+        chat_session = model.start_chat(history=history_for_gemini)
+        response = chat_session.send_message(request.message)
+        
+        function_call = response.candidates[0].content.parts[0].function_call
+        if function_call:
+            tool_name = function_call.name
+            tool_args = {key: value for key, value in function_call.args.items()}
+            
+            tools_map = {tool.__name__: tool for tool in all_tools}
+            if tool_name in tools_map:
+                tool_result = tools_map[tool_name](**tool_args)
+                response = chat_session.send_message(
+                    protos.FunctionResponse(name=tool_name, response=tool_result)
+                )
+
+        final_text = "".join(part.text for part in response.parts)
+        response_text = final_text
+
+    except Exception as e:
+        print(f"Error en el fallback a Gemini: {e}")
+        response_text = "Lo siento, mi pana, pero algo falló con mi cerebro principal. Inténtalo de nuevo."
+
 
 @app.get("/api/history/{conversation_id}", response_model=list[PydanticMessage])
 def get_history(conversation_id: str, db: Session = Depends(database.get_db)):
