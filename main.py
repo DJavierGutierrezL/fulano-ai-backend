@@ -29,7 +29,7 @@ from intents import INTENTS # Importamos las intenciones desde nuestro archivo
 # --- Configuración de APIs (sin cambios) ---
 api_key = os.getenv("GEMINI_API_KEY")
 weather_api_key = os.getenv("WEATHER_API_KEY")
-news_api_key = os.getenv("NEWS_API_KEY")
+gnews_api_key = os.getenv("GNEWS_API_KEY")
 serper_api_key = os.getenv("SERPER_API_KEY")
 cohere_api_key = os.getenv("COHERE_API_KEY")
 marvel_public_key = os.getenv("MARVEL_PUBLIC_KEY")
@@ -64,14 +64,16 @@ def get_weather(city: str):
 
 # ... (Aquí van el resto de tus funciones: get_news, google_search, translate_text, calculate, rerank_documents, get_pokemon_info, search_marvel_character, search_free_images, search_wikipedia, get_exchange_rate)
 def get_news(query: str):
-    """Busca las 5 noticias más recientes sobre un tema específico."""
-    if not news_api_key: return {"error": "El servicio de noticias no está configurado"}
+    """Busca las 3 noticias más recientes sobre un tema específico usando GNews."""
+    if not gnews_api_key: return {"error": "El servicio de noticias no está configurado"}
     try:
-        url = f"https://newsapi.org/v2/top-headlines?q={query}&language=es&pageSize=5&apiKey={news_api_key}"
+        url = f"https://gnews.io/api/v4/search?q={query}&lang=es&max=3&apikey={gnews_api_key}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
         headlines = [{"title": article["title"], "url": article["url"]} for article in data["articles"]]
+        if not headlines:
+            return {"result": f"No se encontraron noticias sobre '{query}'."}
         return {"headlines": headlines}
     except requests.exceptions.RequestException:
         return {"error": f"No se pudieron obtener noticias sobre {query}"}
