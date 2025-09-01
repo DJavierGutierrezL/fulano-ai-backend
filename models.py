@@ -1,7 +1,8 @@
 # models.py
+import os
 from sqlalchemy import Column, String, Text, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from database import Base
+from database import Base, engine # Asegúrate de que importa de 'database'
 import uuid
 from datetime import datetime
 
@@ -23,3 +24,6 @@ class Message(Base):
     handled_by_gemini = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     conversation = relationship("Conversation", back_populates="messages")
+
+# Esta línea crea las tablas usando la conexión correcta
+Base.metadata.create_all(bind=engine)
