@@ -8,3 +8,5 @@ cohere
 pokebase
 wikipedia-api
 scikit-learn
+sqlalchemy
+psycopg2-binary

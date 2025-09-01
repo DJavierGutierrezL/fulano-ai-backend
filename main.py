@@ -324,3 +324,62 @@ def generate_image(request: ImageRequest):
     except Exception as e:
         print(f"ERROR DETALLADO DE GENERACIÓN DE IMAGEN: {e}")
         raise HTTPException(status_code=500, detail=f"Error en el servicio de imágenes: {e}")
+    
+    def get_db():
+    db = models.SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ... (Todas tus funciones de herramientas (get_weather, etc.) van aquí sin cambios)
+
+# --- Configuración de FastAPI ---
+app = FastAPI(title="Asistente Virtual con Base de Datos")
+# ... (Middleware sin cambios)
+
+# --- Modelos de Datos Pydantic ---
+class ChatRequest(BaseModel):
+    message: str
+    history: list[Message] | None = None
+    conversation_id: str | None = None # <-- Nuevo campo
+
+# --- Endpoint del Chat (ACTUALIZADO CON BASE DE DATOS) ---
+@app.post("/api/chat")
+def chat(request: ChatRequest, db: Session = Depends(get_db)):
+    # 1. Obtenemos o creamos la conversación
+    conversation = crud.get_or_create_conversation(db, conversation_id=request.conversation_id)
+    
+    # 2. Guardamos el mensaje del usuario
+    crud.create_message(db, conversation_id=conversation.id, sender='user', content=request.message)
+    
+    # Lógica del clasificador (sin cambios)
+    intent = predict_intent(request.message)
+    
+    response_text = ""
+    handled_by_gemini = False
+
+    # 3. Si es una intención simple, la manejamos localmente
+    if intent in ["saludo", "despedida", "agradecimiento", "hora", "chiste"]:
+        # ... (lógica para respuestas rápidas)
+    
+    # 4. Si no, usamos el fallback a Gemini
+    else:
+        handled_by_gemini = True
+        try:
+            # ... (toda la lógica de Gemini y sus herramientas)
+            
+            final_text = "".join(part.text for part in response.parts)
+            response_text = final_text
+        except Exception as e:
+            response_text = f"Error al contactar a Gemini: {e}"
+
+    # 5. Guardamos la respuesta del bot
+    crud.create_message(db, conversation_id=conversation.id, sender='bot', content=response_text, handled_by_gemini=handled_by_gemini)
+    
+    return JSONResponse(content=[{
+        "generated_text": response_text,
+        "conversation_id": conversation.id # Devolvemos el ID de la conversación
+    }])
+
+# ... (El endpoint /api/generate-image no cambia)
