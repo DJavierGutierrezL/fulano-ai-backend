@@ -1,24 +1,16 @@
-# Framework principal
-fastapi
-uvicorn
-
-# Base de datos
-sqlalchemy
-
-# Manejo de variables de entorno
-python-dotenv==1.0.1
-
-# Fechas y tiempos
-pytz
-
-# Requests para APIs externas
-requests
-
-# Google Generative AI
-google-generativeai
-
-# Cohere AI
-cohere
-
-# Pydantic para validaciones
-pydantic
+blinker==1.9.0
+cachelib==0.13.0
+certifi==2025.4.26
+charset-normalizer==3.4.2
+click==8.2.1
+colorama==0.4.6
+Flask==3.1.1
+Flask-Caching==2.3.1
+idna==3.10
+itsdangerous==2.2.0
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+psycopg2-binary==2.9.10
+requests==2.32.3
+urllib3==2.4.0
+Werkzeug==3.1.3
