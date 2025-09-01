@@ -47,7 +47,7 @@ if api_key:
     genai.configure(api_key=api_key)
 
 # --- Herramientas ---
-def get_current_time(timezone: str = "America/Caracas"):
+def get_current_time(timezone: str = "America/Bogota"):
     try:
         tz = pytz.timezone(timezone)
         current_time = datetime.now(tz)
@@ -56,10 +56,17 @@ def get_current_time(timezone: str = "America/Caracas"):
         return {"error": "Zona horaria desconocida"}
 
 def extract_city(text: str) -> str:
-    match = re.search(r"\b(en|de|para)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)", text)
+    # Busca nombres de ciudades en el texto
+    match = re.search(
+        r"\b(?:en|de|para)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)",
+        text,
+        re.IGNORECASE
+    )
     if match:
-        return match.group(2).strip()
-    return "Caracas"
+        return match.group(1).strip()
+    
+    # Si no encuentra ciudad, ponemos Medellin como default
+    return "Medellin"
 
 def get_weather(city: str):
     if not weather_api_key: return {"error": "Servicio clima no configurado"}
