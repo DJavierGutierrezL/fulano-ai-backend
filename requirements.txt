@@ -1,14 +1,24 @@
+# Framework principal
 fastapi
 uvicorn
-requests
-google-generativeai
-pytz
-asteval
-cohere
-pokebase
-wikipedia-api
-scikit-learn
+
+# Base de datos
 sqlalchemy
-psycopg2-binary
-python-dotenv
+
+# Manejo de variables de entorno
+python-dotenv==1.0.1
+
+# Fechas y tiempos
+pytz
+
+# Requests para APIs externas
+requests
+
+# Google Generative AI
+google-generativeai
+
+# Cohere AI
+cohere
+
+# Pydantic para validaciones
 pydantic

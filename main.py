@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 import models, crud, database
 from intents import predict_intent, INTENT_RESPONSES
 from tools import calculate
+from fastapi.middleware.cors import CORSMiddleware
 
 # ==========================
 # Inicializar FastAPI
@@ -20,6 +21,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 👈 En desarrollo lo dejamos abierto
+    allow_credentials=True,
+    allow_methods=["*"],  # 👈 Esto incluye OPTIONS, POST, GET, etc.
+    allow_headers=["*"],
+)
 # ==========================
 # Evento al iniciar (crear tablas si no existen)
 # ==========================
