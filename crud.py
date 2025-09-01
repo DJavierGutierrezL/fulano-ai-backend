@@ -27,3 +27,4 @@ def create_message(db: Session, conversation: models.Conversation, sender: str, 
 
 def get_messages_by_conversation(db: Session, conversation_id: str):
     return db.query(models.Message).filter(models.Message.conversation_id == conversation_id).order_by(models.Message.created_at).all()
+

@@ -256,13 +256,13 @@ def chat_endpoint(request: ChatRequest, db: Session = Depends(get_db)):
     else:
         try:
             conv = crud.get_or_create_conversation(db, request.conversation_id)
-            crud.save_message(db, conv.id, "user", request.message)
+            crud.create_message(db, conv.id, "user", request.message)
             hist = [{"role": ("user" if m.sender == 'user' else "model"), "parts": [{"text": m.content}]} for m in crud.get_messages_by_conversation(db, conv.id)]
             model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction="Eres Fulano, un pana venezolano simpático.", tools=[get_current_time, get_weather])
             chat_session = model.start_chat(history=hist)
             r = chat_session.send_message(request.message)
             response_text = "".join(p.text for p in r.parts)
-            crud.save_message(db, conv.id, "assistant", response_text)
+            crud.create_message(db, conv.id, "assistant", response_text)
             return {"generated_text": response_text, "conversation_id": conv.id, "intent": intent}
         except Exception as e:
             response_text = f"Error con Gemini: {e}"
