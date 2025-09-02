@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Text
 from sqlalchemy.orm import relationship, declarative_base
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
@@ -14,8 +14,8 @@ Base = declarative_base()
 # ==========================
 
 class ChatRequest(BaseModel):
-    conversation_id: Optional[str] = None  # ID opcional para continuar conversación
-    message: str                           # Mensaje del usuario
+    conversation_id: Optional[str] = None
+    message: str
 
 
 # ==========================
@@ -25,21 +25,22 @@ class ChatRequest(BaseModel):
 class Conversation(Base):
     __tablename__ = 'conversations'
 
-    # Opción 1: Auto-incremento (para un id entero)
-    id = Column(Integer, primary_key=True) 
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    conversation_id = Column(String) # Considera si este campo es realmente necesario si 'id' ya es un UUID
+    created_at = Column(DateTime, default=datetime.utcnow) # Es útil tener la fecha de creación
 
-    # Opción 2: UUID generado automáticamente (para un id de tipo UUID)
-    # id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    conversation_id = Column(String)
-    # ... otras columnas
+    # Relación inversa (back_populates) para acceder a los mensajes desde la conversación
+    messages = relationship("Message", back_populates="conversation")
 
 
 class Message(Base):
     __tablename__ = "messages"
 
-    id = Column(Integer, primary_key=True, index=True)
-    conversation_id = Column(Integer, ForeignKey("conversations.id"))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Asegúrate de que el tipo de ForeignKey coincida con el tipo de la clave primaria de 'conversations'
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id"))
+    
     sender = Column(String)  # "user" o "bot"
     content = Column(Text)
     handled_by_gemini = Column(Boolean, default=False)
